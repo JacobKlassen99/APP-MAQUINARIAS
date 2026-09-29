@@ -13,6 +13,32 @@
   }
 }
 
+/* =========================================================
+   SUPRESIÓN DE BANNERS / BADGES INYECTADOS POR NETLIFY
+   Garantiza que la barra inferior de navegación quede libre y visible
+   ========================================================= */
+#netlify-badge,
+.netlify-badge,
+[class*="netlify-badge"],
+[id*="netlify-badge"],
+[data-netlify-badge],
+iframe[src*="netlify"],
+div[data-netlify-drawer],
+[class*="netlify-drawer"],
+#netlify-drawer,
+div:has(> a[href*="netlify.com"]),
+a[href*="netlify.com"][class*="badge"],
+footer[class*="netlify"] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  opacity: 0 !important;
+  position: absolute !important;
+  z-index: -9999 !important;
+}
+
 @media print {
   @page {
     size: auto;

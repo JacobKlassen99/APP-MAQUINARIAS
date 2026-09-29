@@ -8,6 +8,7 @@ import {
   Tractor,
   X
 } from 'lucide-react';
+import { PWAInstallButton } from './PWAInstallButton';
 
 export type TabType = 'dashboard' | 'nuevo' | 'registros' | 'reportes' | 'config';
 
@@ -128,6 +129,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             );
           })}
         </nav>
+
+        {/* In-App PWA Install in Sidebar */}
+        <div className="px-4 py-2">
+          <PWAInstallButton variant="sidebar" />
+        </div>
 
         {/* Footer info without technical codes */}
         <div className="p-4 border-t border-blue-900/40 text-xs text-blue-300/80 text-center">

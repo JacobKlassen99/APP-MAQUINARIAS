@@ -1,0 +1,23 @@
+[build]
+  publish = "dist"
+  command = "npm run build"
+
+[build.environment]
+  DISABLE_NETLIFY_DRAWER = "true"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Content-Type = "application/manifest+json; charset=utf-8"
+    Cache-Control = "no-cache"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+

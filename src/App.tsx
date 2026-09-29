@@ -38,6 +38,7 @@ import { Registros } from './components/Registros';
 import { Reportes } from './components/Reportes';
 import { Configuracion } from './components/Configuracion';
 import { ComprobanteModal } from './components/ComprobanteModal';
+import { PWAInstallButton } from './components/PWAInstallButton';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
@@ -281,6 +282,7 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
+            <PWAInstallButton variant="header" />
             <button
               onClick={() => cargarTodo()}
               disabled={isLoading}
@@ -436,7 +438,7 @@ export default function App() {
       </div>
 
       {/* MOBILE-FIRST FIXED BOTTOM NAVIGATION BAR */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 flex items-center justify-around z-40 px-1 shadow-lg no-print">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 flex items-center justify-around z-50 px-1 shadow-xl pb-[env(safe-area-inset-bottom,0px)] no-print">
         <button
           onClick={() => handleSelectTab('dashboard')}
           className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] font-bold transition ${

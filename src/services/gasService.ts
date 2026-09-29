@@ -29,7 +29,16 @@ declare global {
  * URL oficial del Web App de Google Apps Script.
  * Google Sheets es la ÚNICA fuente de información.
  */
-export const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwFzFAs95Yaf_X4kdUurEtKhjW36-qa2xcZlGPsI2FOiH7qLGPG3uwpHNoKF7AU8REN/exec';
+const DEFAULT_URL = 'https://script.google.com/macros/s/AKfycbwFzFAs95Yaf_X4kdUurEtKhjW36-qa2xcZlGPsI2FOiH7qLGPG3uwpHNoKF7AU8REN/exec';
+
+// Soporta variable de entorno en Netlify (VITE_APPS_SCRIPT_URL o VITE_GAS_URL) con fallback automático a la URL oficial
+const ENV_URL = (typeof import.meta !== 'undefined' && (import.meta as any).env)
+  ? ((import.meta as any).env.VITE_APPS_SCRIPT_URL || (import.meta as any).env.VITE_GAS_URL)
+  : undefined;
+
+export const APPS_SCRIPT_URL = (ENV_URL && typeof ENV_URL === 'string' && ENV_URL.startsWith('http'))
+  ? ENV_URL.trim()
+  : DEFAULT_URL;
 
 function isGasMode(): boolean {
   return typeof window !== 'undefined' && typeof window.google?.script?.run !== 'undefined';
@@ -79,6 +88,7 @@ async function callGasGet<T = any>(action: string, params: Record<string, string
   const res = await fetch(url.toString(), {
     method: 'GET',
     redirect: 'follow',
+    cache: 'no-store',
   });
 
   const text = await res.text();
