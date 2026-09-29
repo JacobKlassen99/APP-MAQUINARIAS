@@ -1,0 +1,227 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    color: #0f172a;
+    background-color: #f8fafc;
+  }
+
+  .font-mono-numbers {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media print {
+  @page {
+    size: auto;
+    margin: 10mm;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 9.5pt !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Ocultar elementos de navegación, menús, botones, filtros y cabecera de la app */
+  header, 
+  aside, 
+  nav, 
+  button, 
+  input,
+  select,
+  .no-print,
+  .no-print *,
+  [role="dialog"] > div > div.no-print {
+    display: none !important;
+  }
+
+  /* Asegurar que el contenedor principal ocupe todo el ancho y no corte contenido */
+  #root,
+  .min-h-screen,
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    display: block !important;
+    overflow: visible !important;
+    background: transparent !important;
+  }
+
+  /* =========================================================
+     IMPRESIÓN DEL COMPROBANTE INDIVIDUAL (ComprobanteModal)
+     ========================================================= */
+  body.comprobante-modal-open {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+  }
+
+  /* Ocultar ABSOLUTAMENTE TODO el fondo: Dashboard, Registros, Nuevo, Reportes, Config */
+  body.comprobante-modal-open main,
+  body.comprobante-modal-open header,
+  body.comprobante-modal-open aside,
+  body.comprobante-modal-open nav,
+  body.comprobante-modal-open [role="alert"],
+  body.comprobante-modal-open .no-print,
+  body.comprobante-modal-open .no-print * {
+    display: none !important;
+  }
+
+  /* Resetear capas fixed y flex del contenedor modal para flujo normal en la hoja */
+  body.comprobante-modal-open .comprobante-backdrop {
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    overflow: visible !important;
+    z-index: auto !important;
+    box-shadow: none !important;
+  }
+
+  body.comprobante-modal-open .comprobante-card {
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* El papel físico del comprobante en impresión */
+  body.comprobante-modal-open .comprobante-papel {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 8mm 10mm !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 2px solid #0f172a !important;
+    border-radius: 2px !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  body.comprobante-modal-open .comprobante-papel table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  body.comprobante-modal-open .comprobante-papel th,
+  body.comprobante-modal-open .comprobante-papel td {
+    border: 1px solid #94a3b8 !important;
+    padding: 4px 6px !important;
+    color: #000000 !important;
+  }
+
+  body.comprobante-modal-open .comprobante-papel thead {
+    background: #f1f5f9 !important;
+    color: #000000 !important;
+    display: table-header-group !important;
+  }
+
+  body.comprobante-modal-open .comprobante-papel thead th {
+    color: #000000 !important;
+    font-weight: 800 !important;
+  }
+
+  body.comprobante-modal-open .comprobante-papel tfoot {
+    background: #f8fafc !important;
+    display: table-footer-group !important;
+    font-weight: 800 !important;
+  }
+
+  /* =========================================================
+     IMPRESIÓN DEL REPORTE CONSOLIDADO (Reportes)
+     ========================================================= */
+  body:not(.comprobante-modal-open) main {
+    display: block !important;
+    visibility: visible !important;
+  }
+
+  /* Área imprimible del reporte */
+  .print-area,
+  body:not(.comprobante-modal-open) .print-area {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 0 !important;
+    background: #ffffff !important;
+    overflow: visible !important;
+  }
+
+  .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  /* Tabla de reporte en impresión */
+  .print-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    table-layout: auto !important;
+  }
+
+  .print-table th, 
+  .print-table td {
+    border: 1px solid #94a3b8 !important;
+    padding: 5px 8px !important;
+    color: #000000 !important;
+  }
+
+  .print-table thead {
+    background: #f1f5f9 !important;
+    color: #000000 !important;
+    display: table-header-group !important;
+  }
+
+  .print-table thead th {
+    color: #000000 !important;
+    font-weight: 800 !important;
+  }
+
+  .print-table tfoot {
+    background: #f8fafc !important;
+    display: table-footer-group !important;
+    font-weight: 800 !important;
+  }
+
+  .print-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .print-break-inside-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

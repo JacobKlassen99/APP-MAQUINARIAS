@@ -1,0 +1,1434 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Control de Maquinaria</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --azul-primario: #0a2342;
+      --azul-medio: #1e40af;
+      --azul-acento: #2563eb;
+      --azul-claro: #eff6ff;
+      --gris-fondo: #f8fafc;
+      --blanco: #ffffff;
+      --texto-oscuro: #0f172a;
+      --texto-muted: #64748b;
+      --borde: #cbd5e1;
+      --exito: #16a34a;
+      --peligro: #dc2626;
+      --advertencia: #d97706;
+      --radio: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      background-color: var(--gris-fondo);
+      color: var(--texto-oscuro);
+      font-size: 14px;
+      line-height: 1.4;
+      padding-bottom: 74px;
+    }
+
+    /* TOP HEADER BAR */
+    .header-bar {
+      background-color: var(--azul-primario);
+      color: var(--blanco);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      box-shadow: 0 2px 10px rgba(10, 35, 66, 0.2);
+    }
+
+    .brand-title {
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-sync-top {
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      color: #ffffff;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-sync-top:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    /* BOTTOM NAV (MOBILE FIRST) */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #ffffff;
+      border-top: 1px solid var(--borde);
+      display: flex;
+      justify-content: space-around;
+      padding: 6px 4px 8px 4px;
+      z-index: 50;
+      box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+    }
+
+    .nav-btn {
+      background: none;
+      border: none;
+      color: var(--texto-muted);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 8px;
+      transition: all 0.15s ease;
+      flex: 1;
+      max-width: 80px;
+    }
+
+    .nav-btn.active {
+      color: var(--azul-acento);
+    }
+
+    .nav-btn .icon {
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    /* CONTAINER & TABS */
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+      animation: fadeIn 0.15s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* CARDS & PANELS */
+    .card {
+      background: var(--blanco);
+      border: 1px solid var(--borde);
+      border-radius: var(--radio);
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--texto-oscuro);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* KPI GRID */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    @media (min-width: 768px) {
+      .kpi-grid {
+        grid-template-columns: repeat(4, 1fr);
+      }
+    }
+
+    .kpi-card {
+      background: #ffffff;
+      border: 1px solid var(--borde);
+      border-radius: var(--radio);
+      padding: 14px;
+    }
+    .kpi-label {
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: var(--texto-muted);
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+    .kpi-val {
+      font-size: 22px;
+      font-weight: 900;
+      color: var(--texto-oscuro);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* FORM STYLES */
+    .form-group {
+      margin-bottom: 14px;
+    }
+    .form-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: #334155;
+      margin-bottom: 5px;
+      letter-spacing: 0.3px;
+    }
+    .form-control {
+      width: 100%;
+      height: 48px;
+      padding: 0 12px;
+      border: 1.5px solid var(--borde);
+      border-radius: 10px;
+      font-size: 14px;
+      font-family: inherit;
+      background: #f8fafc;
+      color: var(--texto-oscuro);
+      transition: border-color 0.15s;
+    }
+    .form-control:focus {
+      background: #ffffff;
+      outline: none;
+      border-color: var(--azul-acento);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    /* CLIENT SEARCH LIST */
+    .client-results {
+      position: absolute;
+      top: 52px;
+      left: 0;
+      right: 0;
+      background: #ffffff;
+      border: 1.5px solid var(--azul-acento);
+      border-radius: 10px;
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 30;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+    }
+    .client-item {
+      padding: 10px 14px;
+      border-bottom: 1px solid #f1f5f9;
+      cursor: pointer;
+    }
+    .client-item:hover {
+      background: var(--azul-claro);
+    }
+
+    /* BUTTONS */
+    .btn-main {
+      width: 100%;
+      height: 52px;
+      background: var(--azul-acento);
+      color: #ffffff;
+      border: none;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+      transition: all 0.15s ease;
+    }
+    .btn-main:active {
+      transform: scale(0.99);
+    }
+    .btn-main:disabled {
+      background: #94a3b8;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    /* SUMMARY BANNER */
+    .summary-banner {
+      background: #0f172a;
+      color: #ffffff;
+      padding: 14px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .summary-total {
+      font-size: 24px;
+      font-weight: 900;
+      color: #4ade80;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* RECORD CARDS (MOBILE) */
+    .record-card {
+      background: #ffffff;
+      border: 1px solid var(--borde);
+      border-radius: var(--radio);
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    .record-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .record-nro {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 800;
+      color: var(--azul-primario);
+      background: var(--azul-claro);
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .record-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #f1f5f9;
+    }
+    .btn-action {
+      flex: 1;
+      height: 36px;
+      background: #f1f5f9;
+      border: none;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #334155;
+      cursor: pointer;
+    }
+
+    /* TOAST */
+    .toast-container {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      z-index: 100;
+      pointer-events: none;
+    }
+    .toast {
+      background: #0f172a;
+      color: #ffffff;
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 13px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+      margin-bottom: 8px;
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      animation: fadeIn 0.2s ease;
+    }
+    .toast.ok { background: #16a34a; }
+    .toast.error { background: #dc2626; }
+
+    /* MODAL */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.6);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 90;
+    }
+    .modal-overlay.open {
+      display: flex;
+    }
+    .modal-box {
+      background: #ffffff;
+      border-radius: 16px;
+      max-width: 500px;
+      width: 100%;
+      padding: 20px;
+      box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2);
+    }
+
+    /* PRINT STYLES */
+    @media print {
+      @page {
+        margin: 12mm;
+        size: auto;
+      }
+      body {
+        background: #ffffff !important;
+        color: #000000 !important;
+        font-size: 10pt !important;
+        padding-bottom: 0 !important;
+      }
+      .header-bar, .bottom-nav, .no-print, button {
+        display: none !important;
+      }
+      .print-area {
+        display: block !important;
+      }
+      .print-table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+      }
+      .print-table th, .print-table td {
+        border: 1px solid #94a3b8 !important;
+        padding: 6px 8px !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Top Header -->
+  <header class="header-bar no-print">
+    <div class="brand-title">
+      <span>🚜</span>
+      <span>CONTROL DE MAQUINARIA</span>
+    </div>
+    <button class="btn-sync-top" onclick="cargarTodoDesdeServidor()">
+      <span>🔄</span>
+      <span>Sincronizar</span>
+    </button>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <div class="container">
+
+    <!-- ================= TAB 1: DASHBOARD ================= -->
+    <div id="tab-dashboard" class="tab-content active">
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">Servicios Registrados</div>
+          <div class="kpi-val" id="dashTotalServicios">0</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Servicios Hoy</div>
+          <div class="kpi-val" style="color:#16a34a" id="dashServiciosHoy">0</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Servicios Mes</div>
+          <div class="kpi-val" style="color:#2563eb" id="dashServiciosMes">0</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Horas Mes</div>
+          <div class="kpi-val" id="dashHorasMes">0.0</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="kpi-label">Total Cobrado Este Mes</div>
+        <div class="kpi-val" style="color:#16a34a; font-size: 28px;" id="dashTotalMes">$us. 0,00</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>Último Servicio Registrado</span>
+        </div>
+        <div id="dashUltimoDetalle" style="font-size: 13px; color: #475569;">
+          Cargando información...
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= TAB 2: NUEVO SERVICIO ================= -->
+    <div id="tab-nuevo" class="tab-content">
+      <div class="card">
+        <div class="card-title">
+          <span id="formTitle">Nuevo Servicio de Maquinaria</span>
+          <span style="font-family:'JetBrains Mono'; color:#1e40af; font-size:13px;" id="lblSiguienteNro">SERV-000001</span>
+        </div>
+
+        <form id="formServicio" onsubmit="handleGuardarServicio(event)">
+          <input type="hidden" id="editNroServicio" value="">
+
+          <!-- Fecha -->
+          <div class="form-group">
+            <label class="form-label">Fecha del Servicio *</label>
+            <input type="date" id="inputFecha" class="form-control" required>
+          </div>
+
+          <!-- Cliente Search -->
+          <div class="form-group" style="position:relative;">
+            <label class="form-label">Cliente (Cuenta o Nombre) *</label>
+            <div id="selectedClientBox" style="display:none; padding:10px 14px; background:#eff6ff; border:1.5px solid #bfdbfe; border-radius:10px; align-items:center; justify-content:space-between;">
+              <div>
+                <strong id="selectedClientText" style="color:#1e3a8a; font-size:13px;"></strong>
+              </div>
+              <button type="button" onclick="deseleccionarCliente()" style="background:none; border:none; color:#ef4444; font-weight:800; font-size:16px; cursor:pointer;">✕</button>
+            </div>
+            <input type="text" id="inputClienteSearch" class="form-control" placeholder="Buscar cuenta o nombre..." autocomplete="off">
+            <div id="clientSearchResults" class="client-results" style="display:none;"></div>
+            <input type="hidden" id="inputCuenta" required>
+            <input type="hidden" id="inputCliente" required>
+          </div>
+
+          <!-- Operador & Maquinaria -->
+          <div class="form-group">
+            <label class="form-label">Operador / Personal *</label>
+            <select id="selectOperador" class="form-control" required>
+              <option value="">-- Seleccionar Operador --</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Maquinaria *</label>
+            <select id="selectMaquinaria" class="form-control" onchange="onMaquinariaChange()" required>
+              <option value="">-- Seleccionar Maquinaria --</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Implemento / Servicio</label>
+            <select id="selectImplemento" class="form-control" onchange="onImplementoChange()">
+              <option value="">-- Seleccionar Implemento --</option>
+            </select>
+          </div>
+
+          <!-- Unidad y Precio -->
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Unidad</label>
+              <input type="text" id="inputUnidad" class="form-control" readonly style="font-weight:700; text-align:center;">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Precio Unitario</label>
+              <input type="text" id="inputPrecioVisible" class="form-control" readonly style="font-weight:700; text-align:center; font-family:'JetBrains Mono';">
+              <input type="hidden" id="inputPrecio" value="0">
+            </div>
+          </div>
+
+          <!-- Campos de Horas (Horómetro / Horario) -->
+          <div id="boxHoras" style="background:#f1f5f9; padding:12px; border-radius:10px; margin-bottom:14px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+              <span class="form-label" style="margin:0;">Tipo de Registro</span>
+              <div style="display:flex; gap:6px;">
+                <label><input type="radio" name="radioTipo" value="Horómetro" checked onchange="onTipoHoraChange()"> Horómetro</label>
+                <label style="margin-left:10px;"><input type="radio" name="radioTipo" value="Horario" onchange="onTipoHoraChange()"> Horario</label>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="margin:0;">
+                <label class="form-label" id="lblInicio">Inicio</label>
+                <input type="text" id="inputInicio" class="form-control" oninput="calcularValoresLive()">
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label class="form-label" id="lblFin">Fin</label>
+                <input type="text" id="inputFin" class="form-control" oninput="calcularValoresLive()">
+              </div>
+            </div>
+          </div>
+
+          <!-- Campo Cantidad (para Unidad o Kilómetro) -->
+          <div id="boxCantidad" style="display:none; margin-bottom:14px;">
+            <label class="form-label">Cantidad *</label>
+            <input type="number" step="0.01" id="inputCantidad" class="form-control" oninput="calcularValoresLive()">
+          </div>
+
+          <!-- Summary Live Banner -->
+          <div class="summary-banner">
+            <div>
+              <div style="font-size:10px; text-transform:uppercase; color:#94a3b8; font-weight:800;">Total a Cobrar</div>
+              <div id="lblCalculoDetalle" style="font-size:12px; color:#cbd5e1;">0 hrs x $us. 0,00</div>
+            </div>
+            <div class="summary-total" id="lblTotalCalculado">$us. 0,00</div>
+          </div>
+
+          <button type="submit" id="btnGuardarServicio" class="btn-main">
+            <span>💾</span>
+            <span>GUARDAR SERVICIO</span>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- ================= TAB 3: REGISTROS ================= -->
+    <div id="tab-registros" class="tab-content">
+      <div class="card no-print">
+        <div class="card-title">
+          <span>Registros Oficiales</span>
+          <span style="font-size:12px; color:#64748b;" id="lblTotalRegistros">0 registros</span>
+        </div>
+        <div style="display:flex; gap:8px; margin-bottom:10px;">
+          <input type="text" id="filtroBusqueda" class="form-control" placeholder="Buscar por cliente, máquina..." oninput="filtrarRegistrosUI()">
+          <button class="btn-sync-top" style="background:#0a2342; color:#fff;" onclick="cargarRegistrosDesdeServidor()">🔄</button>
+        </div>
+      </div>
+
+      <div id="listaRegistros"></div>
+    </div>
+
+    <!-- ================= TAB 4: REPORTES ================= -->
+    <div id="tab-reportes" class="tab-content">
+      <div class="card no-print">
+        <div class="card-title">
+          <span>Configuración de Reportes</span>
+          <button onclick="imprimirReporte()" style="background:#16a34a; color:#fff; border:none; padding:8px 14px; border-radius:8px; font-weight:800; cursor:pointer;">
+            🖨️ IMPRIMIR REPORTE
+          </button>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Tipo de Reporte</label>
+          <select id="repTipo" class="form-control" onchange="renderizarReporte()">
+            <option value="maquinaria">Por Maquinaria</option>
+            <option value="maquinaria_cliente">Por Maquinaria y Cliente</option>
+            <option value="cliente">Por Cliente</option>
+            <option value="operador">Por Operador</option>
+          </select>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Año</label>
+            <select id="repAnio" class="form-control" onchange="renderizarReporte()">
+              <option value="2025">2025</option>
+              <option value="2026" selected>2026</option>
+              <option value="2027">2027</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Mes</label>
+            <select id="repMes" class="form-control" onchange="renderizarReporte()">
+              <option value="TODOS">Todo el año</option>
+              <option value="01">Enero</option>
+              <option value="02">Febrero</option>
+              <option value="03">Marzo</option>
+              <option value="04">Abril</option>
+              <option value="05">Mayo</option>
+              <option value="06">Junio</option>
+              <option value="07">Julio</option>
+              <option value="08">Agosto</option>
+              <option value="09">Septiembre</option>
+              <option value="10">Octubre</option>
+              <option value="11">Noviembre</option>
+              <option value="12">Diciembre</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Imprimible de Reporte -->
+      <div id="reporteArea" class="card print-area">
+        <div style="border-bottom:2px solid #0f172a; padding-bottom:10px; margin-bottom:14px;">
+          <h2 style="font-size:20px; font-weight:900;">CONTROL DE MAQUINARIA</h2>
+          <div style="font-size:13px; color:#475569;" id="repSubtitulo">Reporte Consolidado</div>
+        </div>
+        <div id="repContenido"></div>
+      </div>
+    </div>
+
+    <!-- ================= TAB 5: CONFIGURACIÓN ================= -->
+    <div id="tab-config" class="tab-content">
+      <div class="card">
+        <div class="card-title">
+          <span>Catálogo de Datos Oficiales</span>
+        </div>
+        <p style="font-size:12px; color:#64748b; margin-bottom:14px;">
+          Gestión de clientes, operadores y maquinaria registrados en Google Sheets.
+        </p>
+
+        <div style="display:flex; gap:8px; margin-bottom:16px;">
+          <button class="btn-action" onclick="mostrarSeccionConfig('cfgClientes')">Clientes</button>
+          <button class="btn-action" onclick="mostrarSeccionConfig('cfgOperadores')">Operadores</button>
+          <button class="btn-action" onclick="mostrarSeccionConfig('cfgMaquinaria')">Maquinaria</button>
+        </div>
+
+        <div id="cfgClientes" class="cfg-section">
+          <h4 style="margin-bottom:8px;">Clientes Registrados</h4>
+          <div id="listaCfgClientes"></div>
+        </div>
+
+        <div id="cfgOperadores" class="cfg-section" style="display:none;">
+          <h4 style="margin-bottom:8px;">Operadores Registrados</h4>
+          <div id="listaCfgOperadores"></div>
+        </div>
+
+        <div id="cfgMaquinaria" class="cfg-section" style="display:none;">
+          <h4 style="margin-bottom:8px;">Maquinaria y Tarifas</h4>
+          <div id="listaCfgMaquinaria"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav no-print">
+    <button class="nav-btn active" onclick="cambiarTab('dashboard')">
+      <span class="icon">📊</span>
+      <span>Dashboard</span>
+    </button>
+    <button class="nav-btn" onclick="cambiarTab('nuevo')">
+      <span class="icon">➕</span>
+      <span>Nuevo</span>
+    </button>
+    <button class="nav-btn" onclick="cambiarTab('registros')">
+      <span class="icon">📋</span>
+      <span>Registros</span>
+    </button>
+    <button class="nav-btn" onclick="cambiarTab('reportes')">
+      <span class="icon">📈</span>
+      <span>Reportes</span>
+    </button>
+    <button class="nav-btn" onclick="cambiarTab('config')">
+      <span class="icon">⚙️</span>
+      <span>Config</span>
+    </button>
+  </nav>
+
+  <!-- Modal Comprobante Individual -->
+  <div id="modalComprobante" class="modal-overlay">
+    <div class="modal-box print-area">
+      <div style="border-bottom:2px solid #0f172a; padding-bottom:8px; margin-bottom:12px;">
+        <h2 style="font-size:18px; font-weight:900;">CONTROL DE MAQUINARIA</h2>
+        <div style="font-size:12px; color:#64748b;">Comprobante de Servicio</div>
+      </div>
+      <div id="comprobanteDetalle"></div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;" class="no-print">
+        <button class="btn-action" onclick="cerrarModalComprobante()">Cerrar</button>
+        <button style="background:#2563eb; color:#fff; border:none; padding:8px 16px; border-radius:8px; font-weight:700; cursor:pointer;" onclick="window.print()">🖨️ Imprimir</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // State
+    let STATE = {
+      clientes: [],
+      operadores: [],
+      maquinaria: [],
+      servicios: [],
+      siguienteNumero: 'SERV-000001',
+      stats: {}
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('inputFecha').value = new Date().toISOString().slice(0, 10);
+      cargarTodoDesdeServidor();
+      configurarBuscadorClientes();
+    });
+
+    // Toast System
+    function mostrarToast(msg, tipo = 'ok') {
+      const container = document.getElementById('toastContainer');
+      const div = document.createElement('div');
+      div.className = `toast ${tipo}`;
+      div.innerText = msg;
+      container.appendChild(div);
+      setTimeout(() => div.remove(), 4500);
+    }
+
+    // Google Apps Script Runner Bridge
+    function ejecutarServidor(metodo, parametros, onSuccess, onError) {
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        let runner = google.script.run
+          .withSuccessHandler((res) => {
+            if (onSuccess) onSuccess(res);
+          })
+          .withFailureHandler((err) => {
+            const msg = err && err.message ? err.message : String(err);
+            mostrarToast('Error del servidor: ' + msg, 'error');
+            if (onError) onError(msg);
+          });
+
+        if (parametros !== undefined) {
+          runner[metodo](parametros);
+        } else {
+          runner[metodo]();
+        }
+      } else {
+        // Fallback for dev proxy if deployed externally
+        fetch('/api/gas?accion=' + encodeURIComponent(metodo), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(parametros || {})
+        })
+        .then(r => r.json())
+        .then(data => { if (onSuccess) onSuccess(data); })
+        .catch(err => {
+          mostrarToast('Error: ' + err.message, 'error');
+          if (onError) onError(err);
+        });
+      }
+    }
+
+    // Cargar Catálogos y Servicios
+    function cargarTodoDesdeServidor() {
+      ejecutarServidor('obtenerDatosIniciales', undefined, (datos) => {
+        if (!datos) return;
+        STATE.clientes = datos.clientes || [];
+        STATE.operadores = datos.operadores || [];
+        STATE.maquinaria = datos.maquinaria || [];
+        if (datos.siguienteNumero) {
+          STATE.siguienteNumero = datos.siguienteNumero;
+          document.getElementById('lblSiguienteNro').innerText = datos.siguienteNumero;
+        }
+        poblarSelects();
+        renderizarConfigListas();
+      });
+
+      cargarRegistrosDesdeServidor();
+      cargarDashboardDesdeServidor();
+    }
+
+    function cargarDashboardDesdeServidor() {
+      ejecutarServidor('obtenerDashboard', undefined, (d) => {
+        if (!d) return;
+        STATE.stats = d;
+        document.getElementById('dashTotalServicios').innerText = d.totalServicios || 0;
+        document.getElementById('dashServiciosHoy').innerText = d.serviciosHoy || 0;
+        document.getElementById('dashServiciosMes').innerText = d.serviciosMes || 0;
+        document.getElementById('dashHorasMes').innerText = Number(d.horasMes || 0).toFixed(1);
+        document.getElementById('dashTotalMes').innerText = formatearMoneda(d.totalMes || 0);
+
+        if (d.ultimoServicio) {
+          const u = d.ultimoServicio;
+          document.getElementById('dashUltimoDetalle').innerHTML = `
+            <strong>${u.nroServicio}</strong> - ${u.fecha}<br>
+            Cliente: <b>${u.cliente}</b> (Cuenta #${u.cuenta})<br>
+            Máquina: ${u.maquinaria} | Total: <b>${formatearMoneda(u.total)}</b>
+          `;
+        } else {
+          document.getElementById('dashUltimoDetalle').innerText = 'No hay servicios registrados todavía.';
+        }
+      });
+    }
+
+    function cargarRegistrosDesdeServidor() {
+      ejecutarServidor('obtenerServicios', {}, (servicios) => {
+        STATE.servicios = Array.isArray(servicios) ? servicios : [];
+        document.getElementById('lblTotalRegistros').innerText = `${STATE.servicios.length} registros`;
+        filtrarRegistrosUI();
+        renderizarReporte();
+      });
+    }
+
+    function poblarSelects() {
+      // Operadores
+      const selOp = document.getElementById('selectOperador');
+      selOp.innerHTML = '<option value="">-- Seleccionar Operador --</option>';
+      STATE.operadores.forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.operador;
+        opt.textContent = o.operador;
+        selOp.appendChild(opt);
+      });
+
+      // Maquinaria (Únicas)
+      const selMaq = document.getElementById('selectMaquinaria');
+      selMaq.innerHTML = '<option value="">-- Seleccionar Maquinaria --</option>';
+      const unicas = [...new Set(STATE.maquinaria.map(m => m.maquinaria))];
+      unicas.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m;
+        selMaq.appendChild(opt);
+      });
+    }
+
+    function onMaquinariaChange() {
+      const maq = document.getElementById('selectMaquinaria').value;
+      const selImp = document.getElementById('selectImplemento');
+      selImp.innerHTML = '<option value="">-- Seleccionar Implemento --</option>';
+
+      if (!maq) return;
+
+      const configs = STATE.maquinaria.filter(m => m.maquinaria === maq);
+      configs.forEach(c => {
+        if (c.implemento) {
+          const opt = document.createElement('option');
+          opt.value = c.implemento;
+          opt.textContent = c.implemento;
+          selImp.appendChild(opt);
+        }
+      });
+
+      if (configs.length > 0) {
+        selImp.value = configs[0].implemento || '';
+        document.getElementById('inputUnidad').value = configs[0].unidad || 'Hora';
+        document.getElementById('inputPrecio').value = configs[0].precio || 0;
+        document.getElementById('inputPrecioVisible').value = formatearMoneda(configs[0].precio || 0);
+        actualizarModoUnidad(configs[0].unidad);
+      }
+      calcularValoresLive();
+    }
+
+    function onImplementoChange() {
+      const maq = document.getElementById('selectMaquinaria').value;
+      const imp = document.getElementById('selectImplemento').value;
+      const match = STATE.maquinaria.find(m => m.maquinaria === maq && (m.implemento === imp || (!m.implemento && !imp)));
+      if (match) {
+        document.getElementById('inputUnidad').value = match.unidad || 'Hora';
+        document.getElementById('inputPrecio').value = match.precio || 0;
+        document.getElementById('inputPrecioVisible').value = formatearMoneda(match.precio || 0);
+        actualizarModoUnidad(match.unidad);
+      }
+      calcularValoresLive();
+    }
+
+    function actualizarModoUnidad(unidad) {
+      if (unidad === 'Hora') {
+        document.getElementById('boxHoras').style.display = 'block';
+        document.getElementById('boxCantidad').style.display = 'none';
+      } else {
+        document.getElementById('boxHoras').style.display = 'none';
+        document.getElementById('boxCantidad').style.display = 'block';
+      }
+    }
+
+    function onTipoHoraChange() {
+      const tipo = document.querySelector('input[name="radioTipo"]:checked').value;
+      document.getElementById('lblInicio').innerText = tipo === 'Horómetro' ? 'Horómetro Inicial' : 'Hora Inicio';
+      document.getElementById('lblFin').innerText = tipo === 'Horómetro' ? 'Horómetro Final' : 'Hora Fin';
+      calcularValoresLive();
+    }
+
+    function calcularValoresLive() {
+      const unidad = document.getElementById('inputUnidad').value || 'Hora';
+      const precio = parseFloat(document.getElementById('inputPrecio').value) || 0;
+      let cantidad = 0;
+
+      if (unidad === 'Hora') {
+        const tipo = document.querySelector('input[name="radioTipo"]:checked')?.value || 'Horómetro';
+        const ini = document.getElementById('inputInicio').value;
+        const fn = document.getElementById('inputFin').value;
+
+        if (tipo === 'Horómetro') {
+          const v1 = parseFloat(String(ini).replace(',', '.'));
+          const v2 = parseFloat(String(fn).replace(',', '.'));
+          if (!isNaN(v1) && !isNaN(v2) && v2 >= v1) {
+            cantidad = Math.round((v2 - v1) * 100) / 100;
+          }
+        } else {
+          if (ini && fn) {
+            const [h1, m1] = ini.split(':').map(Number);
+            const [h2, m2] = fn.split(':').map(Number);
+            if (!isNaN(h1) && !isNaN(h2)) {
+              let diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+              if (diff < 0) diff += 24 * 60;
+              cantidad = Math.round((diff / 60) * 100) / 100;
+            }
+          }
+        }
+      } else {
+        cantidad = parseFloat(document.getElementById('inputCantidad').value) || 0;
+      }
+
+      const total = Math.round(cantidad * precio * 100) / 100;
+      document.getElementById('lblCalculoDetalle').innerText = `${cantidad} ${unidad}s × ${formatearMoneda(precio)}`;
+      document.getElementById('lblTotalCalculado').innerText = formatearMoneda(total);
+    }
+
+    // Buscador de Clientes
+    function configurarBuscadorClientes() {
+      const input = document.getElementById('inputClienteSearch');
+      const results = document.getElementById('clientSearchResults');
+
+      input.addEventListener('input', () => {
+        const q = input.value.toLowerCase().trim();
+        if (!q) {
+          results.style.display = 'none';
+          return;
+        }
+
+        const matches = STATE.clientes.filter(c => 
+          c.cuenta.toLowerCase().includes(q) || c.nombre.toLowerCase().includes(q)
+        );
+
+        if (matches.length === 0) {
+          results.innerHTML = '<div style="padding:10px; font-size:12px; color:#64748b;">No se encontraron clientes</div>';
+        } else {
+          results.innerHTML = matches.map(c => `
+            <div class="client-item" onclick="seleccionarCliente('${c.cuenta}', '${escapeHtml(c.nombre)}')">
+              <strong>${escapeHtml(c.nombre)}</strong>
+              <div style="font-size:11px; color:#64748b;">Cuenta #${c.cuenta}</div>
+            </div>
+          `).join('');
+        }
+        results.style.display = 'block';
+      });
+    }
+
+    function seleccionarCliente(cuenta, nombre) {
+      document.getElementById('inputCuenta').value = cuenta;
+      document.getElementById('inputCliente').value = nombre;
+      document.getElementById('selectedClientText').innerText = `Cuenta #${cuenta}: ${nombre}`;
+      document.getElementById('selectedClientBox').style.display = 'flex';
+      document.getElementById('inputClienteSearch').style.display = 'none';
+      document.getElementById('clientSearchResults').style.display = 'none';
+    }
+
+    function deseleccionarCliente() {
+      document.getElementById('inputCuenta').value = '';
+      document.getElementById('inputCliente').value = '';
+      document.getElementById('selectedClientBox').style.display = 'none';
+      document.getElementById('inputClienteSearch').style.display = 'block';
+      document.getElementById('inputClienteSearch').value = '';
+    }
+
+    // GUARDAR SERVICIO — PRIORIDAD MÁXIMA
+    function handleGuardarServicio(e) {
+      e.preventDefault();
+
+      const btn = document.getElementById('btnGuardarServicio');
+      const cuenta = document.getElementById('inputCuenta').value;
+      const cliente = document.getElementById('inputCliente').value;
+      const fecha = document.getElementById('inputFecha').value;
+      const operador = document.getElementById('selectOperador').value;
+      const maquinaria = document.getElementById('selectMaquinaria').value;
+      const implemento = document.getElementById('selectImplemento').value;
+      const unidad = document.getElementById('inputUnidad').value || 'Hora';
+      const precio = parseFloat(document.getElementById('inputPrecio').value) || 0;
+      const nroEdicion = document.getElementById('editNroServicio').value;
+
+      if (!cuenta || !cliente) {
+        mostrarToast('Debe buscar y seleccionar un cliente de la lista.', 'error');
+        return;
+      }
+      if (!operador) {
+        mostrarToast('Seleccione un operador.', 'error');
+        return;
+      }
+      if (!maquinaria) {
+        mostrarToast('Seleccione una maquinaria.', 'error');
+        return;
+      }
+
+      let horas = 0;
+      let cantidad = 0;
+      let tipo = '';
+      let inicio = '';
+      let fin = '';
+
+      if (unidad === 'Hora') {
+        tipo = document.querySelector('input[name="radioTipo"]:checked').value;
+        inicio = document.getElementById('inputInicio').value;
+        fin = document.getElementById('inputFin').value;
+        if (!inicio || !fin) {
+          mostrarToast('Ingrese inicio y fin para calcular horas.', 'error');
+          return;
+        }
+        if (tipo === 'Horómetro') {
+          const v1 = parseFloat(inicio.replace(',', '.'));
+          const v2 = parseFloat(fin.replace(',', '.'));
+          horas = Math.max(0, v2 - v1);
+        } else {
+          const [h1, m1] = inicio.split(':').map(Number);
+          const [h2, m2] = fin.split(':').map(Number);
+          let diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+          if (diff < 0) diff += 24 * 60;
+          horas = diff / 60;
+        }
+        horas = Math.round(horas * 100) / 100;
+        cantidad = horas;
+        if (horas <= 0) {
+          mostrarToast('Las horas deben ser mayores a 0.', 'error');
+          return;
+        }
+      } else {
+        cantidad = parseFloat(document.getElementById('inputCantidad').value) || 0;
+        if (cantidad <= 0) {
+          mostrarToast('La cantidad debe ser mayor a 0.', 'error');
+          return;
+        }
+      }
+
+      const total = Math.round(cantidad * precio * 100) / 100;
+
+      const datos = {
+        numero: nroEdicion || undefined,
+        nroServicio: nroEdicion || undefined,
+        fecha,
+        cuenta,
+        cliente,
+        maquinaria,
+        implemento,
+        operador,
+        tipo,
+        inicio,
+        fin,
+        cantidad,
+        unidad,
+        horas,
+        precio,
+        total
+      };
+
+      btn.disabled = true;
+      btn.innerText = '⏳ Guardando en Google Sheets...';
+
+      const metodo = nroEdicion ? 'editarServicio' : 'guardarServicio';
+
+      ejecutarServidor(metodo, datos, (res) => {
+        btn.disabled = false;
+        btn.innerText = '💾 GUARDAR SERVICIO';
+
+        if (res && res.duplicado && !datos.forzarGuardar) {
+          if (confirm(res.mensaje || 'Ya existe un servicio con estos datos. ¿Guardar de todos modos?')) {
+            datos.forzarGuardar = true;
+            btn.disabled = true;
+            ejecutarServidor('guardarServicio', datos, (res2) => {
+              btn.disabled = false;
+              if (res2 && (res2.exito || res2.ok)) {
+                mostrarToast(res2.mensaje || 'Servicio guardado en Google Sheets.', 'ok');
+                limpiarFormulario();
+                cargarTodoDesdeServidor();
+                cambiarTab('registros');
+              } else {
+                mostrarToast('No se pudo guardar: ' + (res2?.mensaje || 'Error'), 'error');
+              }
+            });
+          }
+          return;
+        }
+
+        if (res && (res.exito || res.ok)) {
+          mostrarToast(res.mensaje || 'Servicio guardado correctamente en Google Sheets.', 'ok');
+          limpiarFormulario();
+          cargarTodoDesdeServidor();
+          cambiarTab('registros');
+        } else {
+          const err = res && res.mensaje ? res.mensaje : 'Error desconocido al guardar en Google Sheets.';
+          mostrarToast('No se pudo guardar el servicio: ' + err, 'error');
+        }
+      }, (err) => {
+        btn.disabled = false;
+        btn.innerText = '💾 GUARDAR SERVICIO';
+        mostrarToast('No se pudo guardar el servicio: ' + err, 'error');
+      });
+    }
+
+    function limpiarFormulario() {
+      document.getElementById('editNroServicio').value = '';
+      document.getElementById('formTitle').innerText = 'Nuevo Servicio de Maquinaria';
+      document.getElementById('inputFecha').value = new Date().toISOString().slice(0, 10);
+      deseleccionarCliente();
+      document.getElementById('selectOperador').value = '';
+      document.getElementById('selectMaquinaria').value = '';
+      document.getElementById('selectImplemento').innerHTML = '<option value="">-- Seleccionar Implemento --</option>';
+      document.getElementById('inputUnidad').value = 'Hora';
+      document.getElementById('inputPrecio').value = '0';
+      document.getElementById('inputPrecioVisible').value = '$us. 0,00';
+      document.getElementById('inputInicio').value = '';
+      document.getElementById('inputFin').value = '';
+      document.getElementById('inputCantidad').value = '';
+      actualizarModoUnidad('Hora');
+      calcularValoresLive();
+    }
+
+    // Filtrar y renderizar Registros
+    function filtrarRegistrosUI() {
+      const q = (document.getElementById('filtroBusqueda')?.value || '').toLowerCase().trim();
+      const listDiv = document.getElementById('listaRegistros');
+
+      let filtrados = STATE.servicios;
+      if (q) {
+        filtrados = filtrados.filter(s =>
+          s.nroServicio.toLowerCase().includes(q) ||
+          s.cuenta.toLowerCase().includes(q) ||
+          s.cliente.toLowerCase().includes(q) ||
+          s.maquinaria.toLowerCase().includes(q) ||
+          s.operador.toLowerCase().includes(q)
+        );
+      }
+
+      if (filtrados.length === 0) {
+        listDiv.innerHTML = '<div class="card" style="text-align:center; color:#64748b; padding:24px;">No hay registros para mostrar.</div>';
+        return;
+      }
+
+      listDiv.innerHTML = filtrados.map(s => `
+        <div class="record-card">
+          <div class="record-header">
+            <span class="record-nro">${s.nroServicio}</span>
+            <span style="font-size:12px; color:#64748b; font-weight:700;">${formatearFecha(s.fecha)}</span>
+          </div>
+          <div style="font-size:14px; font-weight:800; color:#0f172a;">${escapeHtml(s.cliente)}</div>
+          <div style="font-size:12px; color:#64748b; margin-bottom:6px;">Cuenta #${s.cuenta} | Op: <strong>${escapeHtml(s.operador)}</strong></div>
+          <div style="background:#f8fafc; padding:8px 12px; border-radius:8px; font-size:12px; display:flex; justify-content:space-between;">
+            <span>${escapeHtml(s.maquinaria)} ${s.implemento ? '(' + escapeHtml(s.implemento) + ')' : ''}</span>
+            <strong style="color:#16a34a; font-family:'JetBrains Mono';">${formatearMoneda(s.total)}</strong>
+          </div>
+          <div class="record-actions">
+            <button class="btn-action" onclick="imprimirComprobante('${s.nroServicio}')">🖨️ Comprobante</button>
+            <button class="btn-action" onclick="editarRegistro('${s.nroServicio}')">✏️ Editar</button>
+            <button class="btn-action" style="color:#dc2626;" onclick="eliminarRegistro('${s.nroServicio}')">🗑️ Eliminar</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function editarRegistro(nroServicio) {
+      const s = STATE.servicios.find(x => x.nroServicio === nroServicio);
+      if (!s) return;
+
+      document.getElementById('editNroServicio').value = s.nroServicio;
+      document.getElementById('formTitle').innerText = `Editar Servicio ${s.nroServicio}`;
+      document.getElementById('inputFecha').value = s.fecha;
+      seleccionarCliente(s.cuenta, s.cliente);
+      document.getElementById('selectOperador').value = s.operador;
+      document.getElementById('selectMaquinaria').value = s.maquinaria;
+      onMaquinariaChange();
+      document.getElementById('selectImplemento').value = s.implemento || '';
+      onImplementoChange();
+
+      if (s.unidad === 'Hora') {
+        const radios = document.getElementsByName('radioTipo');
+        for (const r of radios) {
+          if (r.value === (s.tipo || 'Horómetro')) r.checked = true;
+        }
+        onTipoHoraChange();
+        document.getElementById('inputInicio').value = s.inicio || '';
+        document.getElementById('inputFin').value = s.fin || '';
+      } else {
+        document.getElementById('inputCantidad').value = s.cantidad || 0;
+      }
+
+      calcularValoresLive();
+      cambiarTab('nuevo');
+    }
+
+    function eliminarRegistro(nroServicio) {
+      if (!confirm(`¿Eliminar definitivamente el servicio ${nroServicio} de Google Sheets?`)) return;
+
+      ejecutarServidor('eliminarServicio', { nroServicio }, (res) => {
+        if (res && (res.exito || res.ok)) {
+          mostrarToast(res.mensaje || 'Servicio eliminado de Google Sheets.', 'ok');
+          cargarTodoDesdeServidor();
+        } else {
+          mostrarToast('No se pudo eliminar: ' + (res?.mensaje || 'Error'), 'error');
+        }
+      });
+    }
+
+    // Modal de Comprobante
+    function imprimirComprobante(nroServicio) {
+      const s = STATE.servicios.find(x => x.nroServicio === nroServicio);
+      if (!s) return;
+
+      document.getElementById('comprobanteDetalle').innerHTML = `
+        <div style="display:flex; justify-content:space-between; margin-bottom:12px; font-size:13px;">
+          <div>
+            <strong>Nro: ${s.nroServicio}</strong><br>
+            Fecha: ${formatearFecha(s.fecha)}
+          </div>
+          <div style="text-align:right;">
+            Cliente: <strong>${escapeHtml(s.cliente)}</strong><br>
+            Cuenta: #${s.cuenta}
+          </div>
+        </div>
+        <table class="print-table" style="width:100%; border-collapse:collapse; margin-bottom:16px;">
+          <tr style="background:#f1f5f9;">
+            <th style="padding:6px; text-align:left;">Maquinaria / Detalle</th>
+            <th style="padding:6px; text-align:center;">Unidad</th>
+            <th style="padding:6px; text-align:right;">Cantidad</th>
+            <th style="padding:6px; text-align:right;">Total</th>
+          </tr>
+          <tr>
+            <td style="padding:8px;">${escapeHtml(s.maquinaria)}<br><small>${s.implemento ? escapeHtml(s.implemento) : ''}</small></td>
+            <td style="padding:8px; text-align:center;">${s.unidad}</td>
+            <td style="padding:8px; text-align:right;">${s.unidad === 'Hora' ? s.horas : s.cantidad}</td>
+            <td style="padding:8px; text-align:right; font-weight:900;">${formatearMoneda(s.total)}</td>
+          </tr>
+        </table>
+        <div style="font-size:12px; color:#475569; margin-top:20px; display:flex; justify-content:space-between;">
+          <div style="border-top:1px solid #94a3b8; width:40%; text-align:center; padding-top:4px;">Firma Operador: ${escapeHtml(s.operador)}</div>
+          <div style="border-top:1px solid #94a3b8; width:40%; text-align:center; padding-top:4px;">Firma Cliente</div>
+        </div>
+      `;
+
+      document.getElementById('modalComprobante').classList.add('open');
+    }
+
+    function cerrarModalComprobante() {
+      document.getElementById('modalComprobante').classList.remove('open');
+    }
+
+    // Reportes
+    function renderizarReporte() {
+      const tipo = document.getElementById('repTipo')?.value || 'maquinaria';
+      const anio = document.getElementById('repAnio')?.value || '2026';
+      const mes = document.getElementById('repMes')?.value || 'TODOS';
+
+      let filtrados = STATE.servicios.filter(s => {
+        if (!s.fecha.startsWith(anio)) return false;
+        if (mes !== 'TODOS' && s.fecha.substring(5, 7) !== mes) return false;
+        return true;
+      });
+
+      const agrupado = {};
+      filtrados.forEach(s => {
+        let key = tipo === 'maquinaria' ? s.maquinaria :
+                  tipo === 'cliente' ? `${s.cuenta} - ${s.cliente}` :
+                  tipo === 'operador' ? s.operador :
+                  `${s.maquinaria} | ${s.cuenta} - ${s.cliente}`;
+
+        if (!agrupado[key]) agrupado[key] = { cant: 0, horas: 0, total: 0 };
+        agrupado[key].cant++;
+        agrupado[key].horas += Number(s.horas) || 0;
+        agrupado[key].total += Number(s.total) || 0;
+      });
+
+      let totalG = 0;
+      let horasG = 0;
+
+      let html = `
+        <table class="print-table" style="width:100%; border-collapse:collapse; font-size:12px;">
+          <thead>
+            <tr style="background:#f1f5f9;">
+              <th style="padding:8px; text-align:left;">Detalle</th>
+              <th style="padding:8px; text-align:center;">Servicios</th>
+              <th style="padding:8px; text-align:right;">Horas</th>
+              <th style="padding:8px; text-align:right;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      for (const k in agrupado) {
+        totalG += agrupado[k].total;
+        horasG += agrupado[k].horas;
+        html += `
+          <tr>
+            <td style="padding:6px 8px; font-weight:700;">${escapeHtml(k)}</td>
+            <td style="padding:6px 8px; text-align:center;">${agrupado[k].cant}</td>
+            <td style="padding:6px 8px; text-align:right;">${agrupado[k].horas.toFixed(2)}</td>
+            <td style="padding:6px 8px; text-align:right; font-weight:800; color:#16a34a;">${formatearMoneda(agrupado[k].total)}</td>
+          </tr>
+        `;
+      }
+
+      html += `
+          </tbody>
+          <tfoot>
+            <tr style="background:#f8fafc; font-weight:900; border-top:2px solid #0f172a;">
+              <td style="padding:8px;">TOTAL CONSOLIDADO</td>
+              <td style="padding:8px; text-align:center;">${filtrados.length}</td>
+              <td style="padding:8px; text-align:right;">${horasG.toFixed(2)}</td>
+              <td style="padding:8px; text-align:right; font-size:14px; color:#16a34a;">${formatearMoneda(totalG)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      `;
+
+      document.getElementById('repContenido').innerHTML = html;
+      document.getElementById('repSubtitulo').innerText = `Período: ${mes !== 'TODOS' ? 'Mes ' + mes + '/' : ''}${anio}`;
+    }
+
+    function imprimirReporte() {
+      window.print();
+    }
+
+    // Configuración
+    function mostrarSeccionConfig(id) {
+      document.querySelectorAll('.cfg-section').forEach(s => s.style.display = 'none');
+      document.getElementById(id).style.display = 'block';
+    }
+
+    function renderizarConfigListas() {
+      document.getElementById('listaCfgClientes').innerHTML = STATE.clientes.map(c => `
+        <div style="padding:6px 0; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; font-size:13px;">
+          <span><strong>#${c.cuenta}</strong> - ${escapeHtml(c.nombre)}</span>
+        </div>
+      `).join('');
+
+      document.getElementById('listaCfgOperadores').innerHTML = STATE.operadores.map(o => `
+        <div style="padding:6px 0; border-bottom:1px solid #f1f5f9; font-size:13px;">
+          ${escapeHtml(o.operador)}
+        </div>
+      `).join('');
+
+      document.getElementById('listaCfgMaquinaria').innerHTML = STATE.maquinaria.map(m => `
+        <div style="padding:6px 0; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; font-size:13px;">
+          <span><strong>${escapeHtml(m.maquinaria)}</strong> ${m.implemento ? '(' + escapeHtml(m.implemento) + ')' : ''}</span>
+          <span style="font-weight:700;">${formatearMoneda(m.precio)} / ${m.unidad}</span>
+        </div>
+      `).join('');
+    }
+
+    // Navegación
+    function cambiarTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+
+      const target = document.getElementById('tab-' + tabId);
+      if (target) target.classList.add('active');
+
+      const idx = ['dashboard', 'nuevo', 'registros', 'reportes', 'config'].indexOf(tabId);
+      const btns = document.querySelectorAll('.nav-btn');
+      if (btns[idx]) btns[idx].classList.add('active');
+
+      if (tabId === 'registros') cargarRegistrosDesdeServidor();
+      if (tabId === 'dashboard') cargarDashboardDesdeServidor();
+      if (tabId === 'reportes') renderizarReporte();
+    }
+
+    // Formateadores
+    function formatearMoneda(val) {
+      const n = Number(val) || 0;
+      return '$us. ' + n.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function formatearFecha(f) {
+      if (!f) return '';
+      const p = String(f).split('-');
+      return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : f;
+    }
+
+    function escapeHtml(t) {
+      return String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+  </script>
+</body>
+</html>

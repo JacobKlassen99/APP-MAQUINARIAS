@@ -1,0 +1,200 @@
+import { TipoHora, Servicio } from '../types';
+
+/**
+ * Formats monetary amounts to user requirement:
+ * "$us. 39,00", "$us. 312,00", "$us. 3,60", "$us. 360,00"
+ */
+export function formatCurrency(amount: number | string | null | undefined): string {
+  if (amount === null || amount === undefined || isNaN(Number(amount))) {
+    return '$us. 0,00';
+  }
+  const num = Number(amount);
+  const fixed = num.toFixed(2);
+  const [intPart, decPart] = fixed.split('.');
+  const formattedInt = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `$us. ${formattedInt},${decPart}`;
+}
+
+/**
+ * Formats a plain number with comma decimals
+ */
+export function formatNumber(val: number | string | null | undefined, decimals = 2): string {
+  if (val === null || val === undefined || isNaN(Number(val))) {
+    return '0';
+  }
+  const num = Number(val);
+  if (Number.isInteger(num) && decimals === 0) {
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  }
+  const fixed = num.toFixed(decimals);
+  const [intPart, decPart] = fixed.split('.');
+  const formattedInt = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return decPart ? `${formattedInt},${decPart}` : formattedInt;
+}
+
+/**
+ * Formats a date YYYY-MM-DD to DD/MM/YYYY
+ */
+export function formatDateDisplay(dateStr: string | null | undefined): string {
+  if (!dateStr) return '-';
+  // If it's already in DD/MM/YYYY
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) return dateStr;
+  
+  // If it's YYYY-MM-DD
+  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    return `${match[3]}/${match[2]}/${match[1]}`;
+  }
+
+  // If it's a date string
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
+  return dateStr;
+}
+
+/**
+ * Gets today's date in YYYY-MM-DD for date input
+ */
+export function getTodayDateString(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Calculates hours based on Tipo (Horómetro vs Horario)
+ */
+export function calcularHoras(tipo: TipoHora, inicio: string, fin: string): number {
+  if (!inicio || !fin) return 0;
+
+  if (tipo === 'Horómetro') {
+    const valInicio = parseFloat(inicio.replace(',', '.'));
+    const valFin = parseFloat(fin.replace(',', '.'));
+    if (isNaN(valInicio) || isNaN(valFin)) return 0;
+    const diff = valFin - valInicio;
+    return diff > 0 ? Math.round(diff * 100) / 100 : 0;
+  }
+
+  if (tipo === 'Horario') {
+    const parseTime = (timeStr: string) => {
+      const parts = timeStr.trim().split(':');
+      if (parts.length < 2) return null;
+      const hours = parseInt(parts[0], 10);
+      const minutes = parseInt(parts[1], 10);
+      if (isNaN(hours) || isNaN(minutes)) return null;
+      return hours * 60 + minutes;
+    };
+
+    const t1 = parseTime(inicio);
+    const t2 = parseTime(fin);
+    if (t1 === null || t2 === null) return 0;
+
+    let diffMinutes = t2 - t1;
+    // Midnight rollover support (e.g., 22:00 -> 02:00 is 4 hours)
+    if (diffMinutes < 0) {
+      diffMinutes += 24 * 60;
+    }
+    const hours = diffMinutes / 60;
+    return Math.round(hours * 100) / 100;
+  }
+
+  return 0;
+}
+
+/**
+ * Formats next sequence: SERV-000001, SERV-000125
+ */
+export function formatNumeroServicio(seq: number): string {
+  const padded = String(seq).padStart(6, '0');
+  return `SERV-${padded}`;
+}
+
+/**
+ * Extracts number from "SERV-000125" -> 125
+ */
+export function parseNumeroServicio(nro: string): number {
+  if (!nro) return 0;
+  const match = nro.match(/\d+/);
+  return match ? parseInt(match[0], 10) : 0;
+}
+
+/**
+ * Ordena servicios de forma descendente (más reciente primero).
+ * Criterio principal: Número de servicio correlativo (SERV-000004 > SERV-000003).
+ * Criterio secundario: Fecha descendente.
+ * Criterio terciario: Fila de Google Sheets descendente.
+ */
+export function ordenarServiciosDesc(items: Servicio[]): Servicio[] {
+  if (!Array.isArray(items)) return [];
+  return [...items].sort((a, b) => {
+    const numA = parseInt(String(a.nroServicio || a.numero || '').replace(/\D/g, ''), 10) || 0;
+    const numB = parseInt(String(b.nroServicio || b.numero || '').replace(/\D/g, ''), 10) || 0;
+    if (numB !== numA) {
+      return numB - numA;
+    }
+    if (b.fecha && a.fecha && b.fecha !== a.fecha) {
+      return b.fecha.localeCompare(a.fecha);
+    }
+    return (b.fila || 0) - (a.fila || 0);
+  });
+}
+
+/**
+ * Normaliza una cadena de texto para búsquedas:
+ * - Elimina acentos y tildes (á->a, é->e, í->i, ó->o, ú->u, ñ se preserva o normaliza limpiamente)
+ * - Convierte a minúsculas
+ * - Elimina espacios redundantes
+ */
+export function normalizarTexto(texto: string | null | undefined): string {
+  if (!texto) return '';
+  return texto
+    .toString()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Evalúa si un cliente coincide con el término de búsqueda.
+ * Permite buscar por:
+ * - Número de cuenta (ej. "148")
+ * - Cualquier nombre o apellido (ej. "Juan", "Romero", "García", "Pérez")
+ * - Combinaciones parciales o no contiguas (ej. "Juan García", "Romero García")
+ * - Sin distinción de mayúsculas/minúsculas ni acentos ("García" === "garcia")
+ */
+export function coincideCliente(
+  cliente: { cuenta?: string; nombre?: string },
+  terminoBusqueda: string
+): boolean {
+  if (!terminoBusqueda || !terminoBusqueda.trim()) return false;
+
+  const queryNorm = normalizarTexto(terminoBusqueda);
+  if (!queryNorm) return false;
+
+  const cuentaNorm = normalizarTexto(cliente.cuenta || '');
+  const nombreNorm = normalizarTexto(cliente.nombre || '');
+  const textoCompleto = `${cuentaNorm} ${nombreNorm}`.trim();
+
+  // 1. Coincidencia directa completa en la cuenta o en el nombre completo
+  if (textoCompleto.includes(queryNorm)) {
+    return true;
+  }
+
+  // 2. Coincidencia por términos/palabras separadas (ej. "Juan García" en "Juan Romero García")
+  const palabras = queryNorm.split(/\s+/).filter(Boolean);
+  if (palabras.length > 0) {
+    return palabras.every((palabra) => textoCompleto.includes(palabra));
+  }
+
+  return false;
+}
+

@@ -1,0 +1,6 @@
+{
+  "name": "Control de Maquinaria",
+  "description": "Sistema profesional de registro, control de servicios, reportes y administración de maquinaria conectado a Google Sheets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
