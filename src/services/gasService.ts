@@ -4,6 +4,8 @@ import {
   MaquinariaConfig, 
   Servicio, 
   FiltrosServicio, 
+  FiltrosPaginacion,
+  RespuestaPaginada,
   DashboardStats,
   TipoReporte,
   ReporteItem
@@ -105,6 +107,40 @@ async function callGasGet<T = any>(action: string, params: Record<string, string
   }
 
   return (json && json.datos !== undefined ? json.datos : json) as T;
+}
+
+/**
+ * Petición HTTP GET al Web App real de Google Apps Script preservando la estructura completa de respuesta (para paginación)
+ */
+async function callGasGetFull<T = any>(action: string, params: Record<string, string> = {}): Promise<T> {
+  const url = new URL(APPS_SCRIPT_URL);
+  url.searchParams.set('action', action);
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') {
+      url.searchParams.set(k, String(v));
+    }
+  }
+
+  const res = await fetch(url.toString(), {
+    method: 'GET',
+    redirect: 'follow',
+    cache: 'no-store',
+  });
+
+  const text = await res.text();
+  let json: any = null;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(`El Web App no devolvió JSON válido. Respuesta: ${text.slice(0, 160)}`);
+  }
+
+  if (json && (json.ok === false || json.exito === false)) {
+    const errorMsg = json.error || json.mensaje || 'Error en la respuesta del Web App';
+    throw new Error(errorMsg);
+  }
+
+  return json as T;
 }
 
 /**
@@ -367,6 +403,68 @@ export const gasService = {
 
     const data = await callGasGet<any[]>('servicios', params);
     return ordenarServiciosDesc(normalizarServicios(data));
+  },
+
+  /**
+   * Obtiene servicios con paginación real desde Google Sheets (hasta 200 por página)
+   * Devuelve { ok, datos: [...200], total, pagina, limite, totalPaginas }
+   */
+  async obtenerServiciosPaginados(filtros: FiltrosPaginacion = {}): Promise<RespuestaPaginada<Servicio>> {
+    const requestedPage = Math.max(1, Number(filtros.page || filtros.pagina) || 1);
+    const requestedLimit = Math.max(1, Math.min(500, Number(filtros.limit || filtros.limite) || 200));
+
+    const params: Record<string, string> = {
+      page: String(requestedPage),
+      limit: String(requestedLimit),
+      pagina: String(requestedPage),
+      limite: String(requestedLimit),
+    };
+    if (filtros.busqueda) {
+      params.buscar = filtros.busqueda;
+      params.busqueda = filtros.busqueda;
+    }
+    if (filtros.maquinaria && filtros.maquinaria !== 'TODAS') {
+      params.maquinaria = filtros.maquinaria;
+    }
+    if (filtros.desde) params.desde = filtros.desde;
+    if (filtros.hasta) params.hasta = filtros.hasta;
+
+    let res: any;
+    if (isGasMode()) {
+      res = await callGasNative<any>('obtenerServicios', params);
+    } else {
+      res = await callGasGetFull<any>('servicios', params);
+    }
+
+    // 1. Si el backend en Google Apps Script ya devuelve la respuesta paginada con metadatos
+    if (res && res.total !== undefined && res.totalPaginas !== undefined && Array.isArray(res.datos)) {
+      return {
+        ok: true,
+        datos: normalizarServicios(res.datos),
+        total: Number(res.total) || 0,
+        pagina: Number(res.pagina) || requestedPage,
+        limite: Number(res.limite) || requestedLimit,
+        totalPaginas: Number(res.totalPaginas) || Math.max(1, Math.ceil((Number(res.total) || 1) / requestedLimit))
+      };
+    }
+
+    // 2. Resiliencia: si el Web App aún devuelve el array antes de actualizar la implementación en Apps Script
+    const rawList = Array.isArray(res) ? res : (res?.datos || []);
+    const listaNormalizada = normalizarServicios(rawList);
+    const ordenados = ordenarServiciosDesc(listaNormalizada);
+    const total = ordenados.length;
+    const totalPaginas = Math.max(1, Math.ceil(total / requestedLimit));
+    const offset = (requestedPage - 1) * requestedLimit;
+    const datosPaginados = ordenados.slice(offset, offset + requestedLimit);
+
+    return {
+      ok: true,
+      datos: datosPaginados,
+      total: total,
+      pagina: requestedPage,
+      limite: requestedLimit,
+      totalPaginas: totalPaginas
+    };
   },
 
   /**

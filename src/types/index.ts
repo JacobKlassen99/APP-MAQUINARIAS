@@ -49,6 +49,23 @@ export interface FiltrosServicio {
   maquinaria?: string;
 }
 
+export interface FiltrosPaginacion extends FiltrosServicio {
+  page?: number;
+  limit?: number;
+  pagina?: number;
+  limite?: number;
+  buscar?: string;
+}
+
+export interface RespuestaPaginada<T> {
+  ok: boolean;
+  datos: T[];
+  total: number;
+  pagina: number;
+  limite: number;
+  totalPaginas: number;
+}
+
 export interface ReporteItem {
   categoria: string;
   subcategoria?: string;

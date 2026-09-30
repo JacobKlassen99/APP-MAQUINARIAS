@@ -82,9 +82,8 @@ export default function App() {
   const cargarTodo = useCallback(async (silencioso: boolean = false) => {
     if (!silencioso) setIsLoading(true);
     try {
-      const [iniciales, serviciosRes, dashboardRes] = await Promise.all([
+      const [iniciales, dashboardRes] = await Promise.all([
         gasService.obtenerDatosIniciales(),
-        gasService.obtenerServicios(),
         gasService.obtenerDashboard()
       ]);
 
@@ -96,18 +95,7 @@ export default function App() {
         if (iniciales.ultimoNumero) setUltimoNumero(iniciales.ultimoNumero);
       }
 
-      if (Array.isArray(serviciosRes)) {
-        const ordenados = ordenarServiciosDesc(serviciosRes);
-        setServicios(ordenados);
-
-        if (dashboardRes) {
-          setStats({
-            ...dashboardRes,
-            ultimoServicio: ordenados[0] || dashboardRes.ultimoServicio || null,
-            ultimosServicios: ordenados.slice(0, 5),
-          });
-        }
-      } else if (dashboardRes) {
+      if (dashboardRes) {
         setStats(dashboardRes);
       }
       setConnectionError(null);
@@ -130,14 +118,21 @@ export default function App() {
   const handleSelectTab = (tab: TabType) => {
     document.body.classList.remove('comprobante-modal-open');
     setActiveTab(tab);
-    if (tab === 'registros') {
-      gasService.obtenerServicios()
-        .then(res => {
-          if (Array.isArray(res)) setServicios(ordenarServiciosDesc(res));
-        })
-        .catch(err => {
-          console.error('Error al actualizar registros:', err);
-        });
+    if (tab === 'reportes') {
+      // 📊 REPORTES: Carga todos los registros necesarios para estadísticas completas
+      if (servicios.length === 0) {
+        setIsLoading(true);
+        gasService.obtenerServicios()
+          .then(res => {
+            if (Array.isArray(res)) setServicios(ordenarServiciosDesc(res));
+          })
+          .catch(err => {
+            console.error('Error al cargar servicios completos para reportes:', err);
+          })
+          .finally(() => {
+            setIsLoading(false);
+          });
+      }
     } else if (tab === 'dashboard') {
       gasService.obtenerDashboard()
         .then(d => {
@@ -249,7 +244,7 @@ export default function App() {
         onSelectTab={handleSelectTab}
         isOpenMobile={isOpenMobile}
         onCloseMobile={() => setIsOpenMobile(false)}
-        serviciosCount={servicios.length}
+        serviciosCount={stats.totalServicios || servicios.length}
       />
 
       {/* Main Body Area */}
@@ -367,8 +362,6 @@ export default function App() {
 
           {activeTab === 'registros' && (
             <Registros
-              servicios={servicios}
-              isLoading={isLoading}
               onEditar={(s) => {
                 setServicioEdicion(s);
                 setActiveTab('nuevo');
@@ -379,7 +372,6 @@ export default function App() {
                 setServicioEdicion(null);
                 setActiveTab('nuevo');
               }}
-              onRefresh={() => cargarTodo()}
               maquinariaList={maquinasUnicas}
             />
           )}
@@ -470,9 +462,9 @@ export default function App() {
         >
           <ClipboardList className="w-5 h-5 mb-0.5" />
           <span>Registros</span>
-          {servicios.length > 0 && (
-            <span className="absolute top-2 right-4 w-4 h-4 bg-blue-600 text-white rounded-full text-[9px] font-mono flex items-center justify-center">
-              {servicios.length}
+          {(stats.totalServicios > 0 || servicios.length > 0) && (
+            <span className="absolute top-2 right-4 px-1.5 min-w-4 h-4 bg-blue-600 text-white rounded-full text-[9px] font-mono flex items-center justify-center">
+              {stats.totalServicios || servicios.length}
             </span>
           )}
         </button>

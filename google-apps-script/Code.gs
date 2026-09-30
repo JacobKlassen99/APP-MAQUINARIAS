@@ -390,41 +390,79 @@ function obtenerServicios(filtros) {
     servicios.push(servicio);
   }
 
-  if (!filtros) return servicios;
-
+  filtros = filtros || {};
   let filtrados = servicios;
 
-  if (filtros.busqueda && filtros.busqueda.trim() !== '') {
-    const q = filtros.busqueda.toLowerCase().trim();
+  const textoBusqueda = String(filtros.busqueda || filtros.buscar || filtros.q || '').toLowerCase().trim();
+  if (textoBusqueda !== '') {
     filtrados = filtrados.filter(function(s) {
       return (
-        s.nroServicio.toLowerCase().indexOf(q) !== -1 ||
-        s.cuenta.toLowerCase().indexOf(q) !== -1 ||
-        s.cliente.toLowerCase().indexOf(q) !== -1 ||
-        s.maquinaria.toLowerCase().indexOf(q) !== -1 ||
-        s.implemento.toLowerCase().indexOf(q) !== -1 ||
-        s.operador.toLowerCase().indexOf(q) !== -1 ||
-        s.tipo.toLowerCase().indexOf(q) !== -1
+        s.nroServicio.toLowerCase().indexOf(textoBusqueda) !== -1 ||
+        s.cuenta.toLowerCase().indexOf(textoBusqueda) !== -1 ||
+        s.cliente.toLowerCase().indexOf(textoBusqueda) !== -1 ||
+        s.maquinaria.toLowerCase().indexOf(textoBusqueda) !== -1 ||
+        s.implemento.toLowerCase().indexOf(textoBusqueda) !== -1 ||
+        s.operador.toLowerCase().indexOf(textoBusqueda) !== -1 ||
+        s.tipo.toLowerCase().indexOf(textoBusqueda) !== -1
       );
     });
   }
 
-  if (filtros.desde && filtros.desde.trim() !== '') {
+  if (filtros.desde && String(filtros.desde).trim() !== '') {
+    const dStr = String(filtros.desde).trim();
     filtrados = filtrados.filter(function(s) {
-      return s.fecha >= filtros.desde;
+      return s.fecha >= dStr;
     });
   }
 
-  if (filtros.hasta && filtros.hasta.trim() !== '') {
+  if (filtros.hasta && String(filtros.hasta).trim() !== '') {
+    const hStr = String(filtros.hasta).trim();
     filtrados = filtrados.filter(function(s) {
-      return s.fecha <= filtros.hasta;
+      return s.fecha <= hStr;
     });
   }
 
-  if (filtros.maquinaria && filtros.maquinaria.trim() !== '' && filtros.maquinaria !== 'TODAS') {
+  if (filtros.maquinaria && String(filtros.maquinaria).trim() !== '' && filtros.maquinaria !== 'TODAS') {
     filtrados = filtrados.filter(function(s) {
       return s.maquinaria === filtros.maquinaria;
     });
+  }
+
+  // Ordenar SIEMPRE del más nuevo al más antiguo (comportamiento oficial)
+  filtrados.sort(function(a, b) {
+    if (a.fecha !== b.fecha) {
+      return a.fecha < b.fecha ? 1 : -1;
+    }
+    const numA = parseInt(String(a.nroServicio || a.numero || '').replace(/\D/g, ''), 10) || 0;
+    const numB = parseInt(String(b.nroServicio || b.numero || '').replace(/\D/g, ''), 10) || 0;
+    if (numA !== numB) {
+      return numB - numA;
+    }
+    return (b.filaIndex || 0) - (a.filaIndex || 0);
+  });
+
+  const tienePaginacion = (filtros.page !== undefined && filtros.page !== null && filtros.page !== '') ||
+                          (filtros.pagina !== undefined && filtros.pagina !== null && filtros.pagina !== '') ||
+                          (filtros.limit !== undefined && filtros.limit !== null && filtros.limit !== '') ||
+                          (filtros.limite !== undefined && filtros.limite !== null && filtros.limite !== '');
+
+  if (tienePaginacion) {
+    const total = filtrados.length;
+    const page = Math.max(1, parseInt(filtros.page || filtros.pagina, 10) || 1);
+    const limit = Math.max(1, parseInt(filtros.limit || filtros.limite, 10) || 200);
+    const totalPaginas = Math.ceil(total / limit) || 1;
+    const offset = (page - 1) * limit;
+    const datosPaginados = filtrados.slice(offset, offset + limit);
+
+    return {
+      ok: true,
+      exito: true,
+      datos: datosPaginados,
+      total: total,
+      pagina: page,
+      limite: limit,
+      totalPaginas: totalPaginas
+    };
   }
 
   return filtrados;
