@@ -428,16 +428,41 @@ function obtenerServicios(filtros) {
     });
   }
 
-  // Ordenar SIEMPRE del más nuevo al más antiguo (comportamiento oficial)
+  // Ordenamiento oficial:
+  // 1. Primero todos los registros nuevos que comienzan con SERV-
+  // 2. Dentro de SERV-, del número más alto al más bajo (SERV-000009 > SERV-000008 > ... > SERV-000001)
+  // 3. Después todos los registros históricos que comienzan con REC-
+  // 4. Dentro de REC-, del número más alto al más bajo (REC-000940 > REC-000939 > ... > REC-000001)
+  // 5. Otros formatos al final, del número más alto al más bajo
   filtrados.sort(function(a, b) {
-    if (a.fecha !== b.fecha) {
-      return a.fecha < b.fecha ? 1 : -1;
+    const nroA = String(a.nroServicio || a.numero || '').trim().toUpperCase();
+    const nroB = String(b.nroServicio || b.numero || '').trim().toUpperCase();
+
+    const esServA = nroA.indexOf('SERV-') === 0;
+    const esServB = nroB.indexOf('SERV-') === 0;
+    const esRecA = nroA.indexOf('REC-') === 0;
+    const esRecB = nroB.indexOf('REC-') === 0;
+
+    const tierA = esServA ? 1 : (esRecA ? 2 : 3);
+    const tierB = esServB ? 1 : (esRecB ? 2 : 3);
+
+    if (tierA !== tierB) {
+      return tierA - tierB;
     }
-    const numA = parseInt(String(a.nroServicio || a.numero || '').replace(/\D/g, ''), 10) || 0;
-    const numB = parseInt(String(b.nroServicio || b.numero || '').replace(/\D/g, ''), 10) || 0;
+
+    const numA = parseInt(nroA.replace(/\D/g, ''), 10) || 0;
+    const numB = parseInt(nroB.replace(/\D/g, ''), 10) || 0;
+
     if (numA !== numB) {
       return numB - numA;
     }
+
+    const fechaA = String(a.fecha || '');
+    const fechaB = String(b.fecha || '');
+    if (fechaA !== fechaB) {
+      return fechaA < fechaB ? 1 : -1;
+    }
+
     return (b.filaIndex || 0) - (a.filaIndex || 0);
   });
 
@@ -449,7 +474,7 @@ function obtenerServicios(filtros) {
   if (tienePaginacion) {
     const total = filtrados.length;
     const page = Math.max(1, parseInt(filtros.page || filtros.pagina, 10) || 1);
-    const limit = Math.max(1, parseInt(filtros.limit || filtros.limite, 10) || 200);
+    const limit = Math.max(1, parseInt(filtros.limit || filtros.limite, 10) || 100);
     const totalPaginas = Math.ceil(total / limit) || 1;
     const offset = (page - 1) * limit;
     const datosPaginados = filtrados.slice(offset, offset + limit);
@@ -558,9 +583,10 @@ function sincronizarNumeroServicios() {
     const nro = String(valores[i][0] || '').trim();
     if (nro) {
       total++;
-      const match = nro.match(/\d+/);
+      // REGLA ESTRICTA: Solo considerar números que comienzan con SERV- (REC- no debe influir jamás)
+      const match = nro.toUpperCase().match(/^SERV-(\d+)/);
       if (match) {
-        const val = parseInt(match[0], 10);
+        const val = parseInt(match[1], 10);
         if (val > maxId) maxId = val;
       }
     }
@@ -854,7 +880,19 @@ function generarReporte(filtros) {
     }
   }
 
+  // Filtro opcional por cliente específico si viene indicado
+  const cuentaCliente = (filtros && filtros.cuenta) ? String(filtros.cuenta).trim() : '';
+  const nombreCliente = (filtros && filtros.cliente) ? String(filtros.cliente).trim().toLowerCase() : '';
+  if (cuentaCliente !== '' || nombreCliente !== '') {
+    servicios = servicios.filter(function(s) {
+      if (cuentaCliente !== '' && String(s.cuenta).trim() === cuentaCliente) return true;
+      if (nombreCliente !== '' && String(s.cliente).trim().toLowerCase().indexOf(nombreCliente) !== -1) return true;
+      return false;
+    });
+  }
+
   const acumulador = {};
+  let totalGeneralDirecto = 0;
 
   for (let i = 0; i < servicios.length; i++) {
     const s = servicios[i];
@@ -862,19 +900,24 @@ function generarReporte(filtros) {
     let cat = '';
     let sub = '';
 
+    const imp = (s.implemento && String(s.implemento).trim() !== '') ? String(s.implemento).trim() : '—';
+
     if (tipo === 'maquinaria') {
       cat = s.maquinaria || 'Sin asignar';
-      key = cat;
+      sub = imp;
+      key = cat + '__' + sub;
     } else if (tipo === 'maquinaria_cliente') {
       cat = s.maquinaria || 'Sin asignar';
-      sub = s.cuenta + ' - ' + s.cliente;
+      sub = (imp !== '—' ? imp + ' — ' : '') + 'Cuenta #' + s.cuenta + ' - ' + s.cliente;
       key = cat + '__' + sub;
-    } else if (tipo === 'cliente') {
-      cat = s.cuenta + ' - ' + s.cliente;
-      key = cat;
+    } else if (tipo === 'cliente' || tipo === 'cliente_especifico') {
+      cat = 'Cuenta #' + s.cuenta + ' - ' + s.cliente;
+      sub = imp !== '—' ? (s.maquinaria + ' / ' + imp) : s.maquinaria;
+      key = cat + (tipo === 'cliente_especifico' ? '__' + sub : '');
     } else if (tipo === 'operador') {
       cat = s.operador || 'Sin operador';
-      key = cat;
+      sub = s.maquinaria + (imp !== '—' ? ' (' + imp + ')' : '');
+      key = cat + '__' + sub;
     }
 
     if (!acumulador[key]) {
@@ -888,14 +931,15 @@ function generarReporte(filtros) {
       };
     }
 
+    const valorTotalServicio = Number(s.total) || 0;
     acumulador[key].servicios += 1;
     acumulador[key].horas += Number(s.horas) || 0;
     acumulador[key].cantidad += Number(s.cantidad) || 0;
-    acumulador[key].total += Number(s.total) || 0;
+    acumulador[key].total += valorTotalServicio;
+    totalGeneralDirecto += valorTotalServicio;
   }
 
   const items = [];
-  let totalGeneral = 0;
   let totalHoras = 0;
   let totalCantidad = 0;
   let totalServicios = 0;
@@ -907,7 +951,6 @@ function generarReporte(filtros) {
     item.total = Math.round(item.total * 100) / 100;
     items.push(item);
 
-    totalGeneral += item.total;
     totalHoras += item.horas;
     totalCantidad += item.cantidad;
     totalServicios += item.servicios;
@@ -917,10 +960,11 @@ function generarReporte(filtros) {
 
   return {
     items: items,
-    totalGeneral: Math.round(totalGeneral * 100) / 100,
+    totalGeneral: Math.round(totalGeneralDirecto * 100) / 100,
     totalHoras: Math.round(totalHoras * 100) / 100,
     totalCantidad: Math.round(totalCantidad * 100) / 100,
-    totalServicios: totalServicios
+    totalServicios: totalServicios,
+    serviciosDetalle: tipo === 'cliente_especifico' ? servicios : undefined
   };
 }
 

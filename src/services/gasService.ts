@@ -76,9 +76,9 @@ function callGasNative<T = any>(functionName: string, ...args: any[]): Promise<T
 }
 
 /**
- * Petición HTTP GET al Web App real de Google Apps Script
+ * Petición HTTP GET al Web App real de Google Apps Script con reintento automático si Google entrega HTML transitorio
  */
-async function callGasGet<T = any>(action: string, params: Record<string, string> = {}): Promise<T> {
+async function callGasGet<T = any>(action: string, params: Record<string, string> = {}, maxRetries = 2): Promise<T> {
   const url = new URL(APPS_SCRIPT_URL);
   url.searchParams.set('action', action);
   for (const [k, v] of Object.entries(params)) {
@@ -87,32 +87,50 @@ async function callGasGet<T = any>(action: string, params: Record<string, string
     }
   }
 
-  const res = await fetch(url.toString(), {
-    method: 'GET',
-    redirect: 'follow',
-    cache: 'no-store',
-  });
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url.toString(), {
+        method: 'GET',
+        redirect: 'follow',
+        cache: 'no-store',
+      });
 
-  const text = await res.text();
-  let json: any = null;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    throw new Error(`El Web App no devolvió JSON válido. Respuesta: ${text.slice(0, 160)}`);
+      const text = await res.text();
+      let json: any = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        if (attempt < maxRetries && (text.includes('<html') || text.includes('<!DOCTYPE'))) {
+          // Breve espera antes del reintento para superar el límite transitorio de concurrencia de Google
+          await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+          continue;
+        }
+        throw new Error(`El Web App no devolvió JSON válido. Respuesta: ${text.slice(0, 160)}`);
+      }
+
+      if (json && (json.ok === false || json.exito === false)) {
+        const errorMsg = json.error || json.mensaje || 'Error en la respuesta del Web App';
+        throw new Error(errorMsg);
+      }
+
+      return (json && json.datos !== undefined ? json.datos : json) as T;
+    } catch (err: any) {
+      lastError = err;
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+        continue;
+      }
+    }
   }
 
-  if (json && (json.ok === false || json.exito === false)) {
-    const errorMsg = json.error || json.mensaje || 'Error en la respuesta del Web App';
-    throw new Error(errorMsg);
-  }
-
-  return (json && json.datos !== undefined ? json.datos : json) as T;
+  throw lastError || new Error('Error al conectar con Google Apps Script');
 }
 
 /**
  * Petición HTTP GET al Web App real de Google Apps Script preservando la estructura completa de respuesta (para paginación)
  */
-async function callGasGetFull<T = any>(action: string, params: Record<string, string> = {}): Promise<T> {
+async function callGasGetFull<T = any>(action: string, params: Record<string, string> = {}, maxRetries = 2): Promise<T> {
   const url = new URL(APPS_SCRIPT_URL);
   url.searchParams.set('action', action);
   for (const [k, v] of Object.entries(params)) {
@@ -121,26 +139,43 @@ async function callGasGetFull<T = any>(action: string, params: Record<string, st
     }
   }
 
-  const res = await fetch(url.toString(), {
-    method: 'GET',
-    redirect: 'follow',
-    cache: 'no-store',
-  });
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url.toString(), {
+        method: 'GET',
+        redirect: 'follow',
+        cache: 'no-store',
+      });
 
-  const text = await res.text();
-  let json: any = null;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    throw new Error(`El Web App no devolvió JSON válido. Respuesta: ${text.slice(0, 160)}`);
+      const text = await res.text();
+      let json: any = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        if (attempt < maxRetries && (text.includes('<html') || text.includes('<!DOCTYPE'))) {
+          await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+          continue;
+        }
+        throw new Error(`El Web App no devolvió JSON válido. Respuesta: ${text.slice(0, 160)}`);
+      }
+
+      if (json && (json.ok === false || json.exito === false)) {
+        const errorMsg = json.error || json.mensaje || 'Error en la respuesta del Web App';
+        throw new Error(errorMsg);
+      }
+
+      return json as T;
+    } catch (err: any) {
+      lastError = err;
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+        continue;
+      }
+    }
   }
 
-  if (json && (json.ok === false || json.exito === false)) {
-    const errorMsg = json.error || json.mensaje || 'Error en la respuesta del Web App';
-    throw new Error(errorMsg);
-  }
-
-  return json as T;
+  throw lastError || new Error('Error al conectar con Google Apps Script');
 }
 
 /**
@@ -238,15 +273,17 @@ function procesarReporteEnCliente(servicios: Servicio[], filtros: {
     let cat = '';
     let subcat: string | undefined = undefined;
 
+    const imp = s.implemento ? s.implemento.trim() : '—';
+
     switch (filtros.tipo) {
       case 'maquinaria':
-        cat = s.maquinaria;
-        subcat = s.implemento ? `${s.implemento} (${s.unidad})` : s.unidad;
+        cat = s.maquinaria || 'Sin asignar';
+        subcat = imp;
         clave = `${cat}|${subcat}`;
         break;
       case 'maquinaria_cliente':
-        cat = s.maquinaria;
-        subcat = `${s.cliente} (${s.cuenta})`;
+        cat = s.maquinaria || 'Sin asignar';
+        subcat = `${imp !== '—' ? imp + ' — ' : ''}${s.cliente} (${s.cuenta})`;
         clave = `${cat}|${subcat}`;
         break;
       case 'cliente':
@@ -254,9 +291,14 @@ function procesarReporteEnCliente(servicios: Servicio[], filtros: {
         subcat = `Cta: ${s.cuenta}`;
         clave = `${cat}|${subcat}`;
         break;
+      case 'cliente_especifico':
+        cat = `Cuenta #${s.cuenta} - ${s.cliente}`;
+        subcat = imp !== '—' ? `${s.maquinaria} / ${imp}` : s.maquinaria;
+        clave = `${cat}|${subcat}`;
+        break;
       case 'operador':
-        cat = s.operador;
-        subcat = s.maquinaria;
+        cat = s.operador || 'Sin operador';
+        subcat = s.maquinaria + (imp !== '—' ? ` (${imp})` : '');
         clave = `${cat}|${subcat}`;
         break;
     }
@@ -363,12 +405,21 @@ export const gasService = {
       fila: typeof m.fila === 'number' ? m.fila : undefined,
     }));
 
-    const ultimoId = typeof configRaw?.ultimoServicio === 'number' 
-      ? configRaw.ultimoServicio 
-      : (parseInt(String(configRaw?.ultimoServicio || '0').replace(/\D/g, ''), 10) || 0);
+    // REGLA ESTRICTA: El correlativo SERV- solo se basa en registros SERV- (los REC- históricos no intervienen)
+    let ultimoServId = 0;
+    if (configRaw?.ultimoServicio) {
+      const strVal = String(configRaw.ultimoServicio).trim().toUpperCase();
+      const match = strVal.match(/^SERV-(\d+)/);
+      if (match) {
+        ultimoServId = parseInt(match[1], 10);
+      } else if (typeof configRaw.ultimoServicio === 'number' && configRaw.ultimoServicio < 500) {
+        // En caso de que el backend entregue el número entero directamente
+        ultimoServId = configRaw.ultimoServicio;
+      }
+    }
 
-    const sigId = ultimoId + 1;
-    const ultimoNumero = 'SERV-' + ('000000' + ultimoId).slice(-6);
+    const sigId = ultimoServId + 1;
+    const ultimoNumero = 'SERV-' + ('000000' + ultimoServId).slice(-6);
     const siguienteNumero = 'SERV-' + ('000000' + sigId).slice(-6);
 
     return {
@@ -406,12 +457,12 @@ export const gasService = {
   },
 
   /**
-   * Obtiene servicios con paginación real desde Google Sheets (hasta 200 por página)
-   * Devuelve { ok, datos: [...200], total, pagina, limite, totalPaginas }
+   * Obtiene servicios con paginación real desde Google Sheets (100 por página)
+   * Devuelve { ok, datos: [...100], total, pagina, limite, totalPaginas }
    */
   async obtenerServiciosPaginados(filtros: FiltrosPaginacion = {}): Promise<RespuestaPaginada<Servicio>> {
     const requestedPage = Math.max(1, Number(filtros.page || filtros.pagina) || 1);
-    const requestedLimit = Math.max(1, Math.min(500, Number(filtros.limit || filtros.limite) || 200));
+    const requestedLimit = Math.max(1, Math.min(500, Number(filtros.limit || filtros.limite) || 100));
 
     const params: Record<string, string> = {
       page: String(requestedPage),
@@ -438,9 +489,11 @@ export const gasService = {
 
     // 1. Si el backend en Google Apps Script ya devuelve la respuesta paginada con metadatos
     if (res && res.total !== undefined && res.totalPaginas !== undefined && Array.isArray(res.datos)) {
+      const normalizados = normalizarServicios(res.datos);
+      const ordenados = ordenarServiciosDesc(normalizados);
       return {
         ok: true,
-        datos: normalizarServicios(res.datos),
+        datos: ordenados,
         total: Number(res.total) || 0,
         pagina: Number(res.pagina) || requestedPage,
         limite: Number(res.limite) || requestedLimit,

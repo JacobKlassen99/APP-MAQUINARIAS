@@ -1,30 +1,86 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   BarChart3, 
   Printer, 
-  Calendar, 
   RotateCcw, 
-  Tractor, 
-  Users, 
-  UserCheck,
-  TrendingUp,
-  Clock,
-  DollarSign,
-  ClipboardList
+  Search, 
+  User, 
+  Check, 
+  X, 
+  ChevronDown, 
+  Calendar,
+  Layers,
+  Users,
+  Tractor,
+  UserCheck
 } from 'lucide-react';
-import { Servicio, TipoReporte, ReporteItem } from '../types';
-import { formatCurrency, formatNumber, formatDateDisplay } from '../utils/formatters';
+import { Servicio, TipoReporte, ReporteItem, Cliente } from '../types';
+import { 
+  formatCurrency, 
+  formatNumber, 
+  formatDateDisplay, 
+  coincideCliente, 
+  ordenarServiciosDesc 
+} from '../utils/formatters';
 
 interface ReportesProps {
   servicios: Servicio[];
+  clientes?: Cliente[];
+  onRefrescarServicios?: () => void;
+  isLoadingServicios?: boolean;
 }
 
-export const Reportes: React.FC<ReportesProps> = ({ servicios }) => {
+export const Reportes: React.FC<ReportesProps> = ({ 
+  servicios, 
+  clientes = [], 
+  onRefrescarServicios,
+  isLoadingServicios = false 
+}) => {
   const [tipoReporte, setTipoReporte] = useState<TipoReporte>('maquinaria');
-  const [anio, setAnio] = useState<string>('2026');
+  const [anio, setAnio] = useState<string>('TODOS');
   const [mes, setMes] = useState<string>('TODOS');
   const [desde, setDesde] = useState<string>('');
   const [hasta, setHasta] = useState<string>('');
+
+  // Estado para el selector de cliente en "Reporte por Cliente"
+  const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
+  const [clienteSearch, setClienteSearch] = useState<string>('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Cerrar dropdown si se hace click afuera
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Lista consolidada de clientes (de la prop o derivada de servicios)
+  const listaClientesDisponibles = useMemo(() => {
+    if (clientes && clientes.length > 0) return clientes;
+    const mapa = new Map<string, Cliente>();
+    for (const s of servicios) {
+      if (s.cliente) {
+        const cta = String(s.cuenta || '').trim();
+        const nom = String(s.cliente || '').trim();
+        const key = `${cta}__${nom}`;
+        if (!mapa.has(key)) {
+          mapa.set(key, { cuenta: cta, nombre: nom });
+        }
+      }
+    }
+    return Array.from(mapa.values());
+  }, [clientes, servicios]);
+
+  // Clientes filtrados por la búsqueda inteligente (cuenta, nombre, apellido)
+  const clientesFiltrados = useMemo(() => {
+    if (!clienteSearch || !clienteSearch.trim()) return listaClientesDisponibles;
+    return listaClientesDisponibles.filter(c => coincideCliente(c, clienteSearch));
+  }, [listaClientesDisponibles, clienteSearch]);
 
   const mesesNombres = [
     { val: 'TODOS', label: 'Todo el año' },
@@ -42,52 +98,131 @@ export const Reportes: React.FC<ReportesProps> = ({ servicios }) => {
     { val: '12', label: 'Diciembre' },
   ];
 
-  // Calculate period description
+  // Descripción textual del período filtrado
   let periodoTexto = '';
   if (desde && hasta) {
     periodoTexto = `${formatDateDisplay(desde)} al ${formatDateDisplay(hasta)}`;
-  } else if (mes !== 'TODOS') {
-    const mesObj = mesesNombres.find(m => m.val === mes);
-    periodoTexto = `${mesObj?.label} de ${anio}`;
+  } else if (desde) {
+    periodoTexto = `Desde el ${formatDateDisplay(desde)}`;
+  } else if (hasta) {
+    periodoTexto = `Hasta el ${formatDateDisplay(hasta)}`;
+  } else if (anio !== 'TODOS') {
+    if (mes !== 'TODOS') {
+      const mesObj = mesesNombres.find(m => m.val === mes);
+      periodoTexto = `${mesObj?.label} de ${anio}`;
+    } else {
+      periodoTexto = `Año ${anio} completo`;
+    }
   } else {
-    periodoTexto = `Año ${anio} completo`;
+    periodoTexto = 'Histórico Completo (Todos los años)';
   }
 
-  // Filter and group live services
-  const { items, totalGeneral, totalHoras, totalCantidad, totalServicios } = useMemo(() => {
+  // Filtrado de servicios por período
+  const serviciosFiltradosPorPeriodo = useMemo(() => {
     let filtrados = [...servicios];
 
     if (desde && hasta) {
-      filtrados = filtrados.filter(s => s.fecha >= desde && s.fecha <= hasta);
-    } else if (anio) {
+      filtrados = filtrados.filter(s => s.fecha && s.fecha >= desde && s.fecha <= hasta);
+    } else if (desde) {
+      filtrados = filtrados.filter(s => s.fecha && s.fecha >= desde);
+    } else if (hasta) {
+      filtrados = filtrados.filter(s => s.fecha && s.fecha <= hasta);
+    } else if (anio && anio !== 'TODOS') {
       if (mes && mes !== 'TODOS') {
         const prefix = `${anio}-${('0' + mes).slice(-2)}`;
-        filtrados = filtrados.filter(s => s.fecha.startsWith(prefix));
+        filtrados = filtrados.filter(s => s.fecha && s.fecha.startsWith(prefix));
       } else {
-        filtrados = filtrados.filter(s => s.fecha.startsWith(String(anio)));
+        filtrados = filtrados.filter(s => s.fecha && s.fecha.startsWith(String(anio)));
       }
     }
 
-    const acumulador: Record<string, ReporteItem> = {};
+    return filtrados;
+  }, [servicios, anio, mes, desde, hasta]);
 
-    for (const s of filtrados) {
+  // CÁLCULO ESPECÍFICO: REPORTE DETALLADO POR CLIENTE
+  const datosReporteCliente = useMemo(() => {
+    if (tipoReporte !== 'cliente_especifico' || !clienteSeleccionado) {
+      return { serviciosCliente: [], totalGeneralCliente: 0, totalHorasCliente: 0, totalCantidadCliente: 0 };
+    }
+
+    // Filtrar estrictamente los servicios de ese cliente
+    const ctaObjetivo = String(clienteSeleccionado.cuenta || '').trim().toLowerCase();
+    const nomObjetivo = String(clienteSeleccionado.nombre || '').trim().toLowerCase();
+
+    const deEsteCliente = serviciosFiltradosPorPeriodo.filter(s => {
+      const cta = String(s.cuenta || '').trim().toLowerCase();
+      const nom = String(s.cliente || '').trim().toLowerCase();
+      if (ctaObjetivo !== '' && cta === ctaObjetivo) return true;
+      if (nomObjetivo !== '' && nom === nomObjetivo) return true;
+      return false;
+    });
+
+    // Ordenar con la regla oficial (SERV- descendente primero, luego REC- descendente)
+    const ordenados = ordenarServiciosDesc(deEsteCliente);
+
+    // TOTAL GENERAL DEL CLIENTE: SUMA DIRECTA de la columna Total
+    let sumTotal = 0;
+    let sumHoras = 0;
+    let sumCant = 0;
+
+    for (const s of ordenados) {
+      sumTotal += Number(s.total) || 0;
+      sumHoras += Number(s.horas) || 0;
+      sumCant += Number(s.cantidad) || 0;
+    }
+
+    return {
+      serviciosCliente: ordenados,
+      totalGeneralCliente: Math.round(sumTotal * 100) / 100,
+      totalHorasCliente: Math.round(sumHoras * 100) / 100,
+      totalCantidadCliente: Math.round(sumCant * 100) / 100
+    };
+  }, [tipoReporte, clienteSeleccionado, serviciosFiltradosPorPeriodo]);
+
+  // CÁLCULO DE REPORTES AGRUPADOS (Maquinaria e Implemento, Cliente, Operador)
+  const { items, totalGeneral, totalHoras, totalCantidad, totalServicios } = useMemo(() => {
+    if (tipoReporte === 'cliente_especifico') {
+      return { items: [], totalGeneral: 0, totalHoras: 0, totalCantidad: 0, totalServicios: 0 };
+    }
+
+    const acumulador: Record<string, {
+      categoria: string;
+      subcategoria?: string;
+      servicios: number;
+      horas: number;
+      cantidad: number;
+      total: number;
+    }> = {};
+
+    let sumTotGeneral = 0;
+    let sumTotHoras = 0;
+    let sumTotCantidad = 0;
+
+    for (const s of serviciosFiltradosPorPeriodo) {
       let cat = '';
       let sub: string | undefined = undefined;
       let key = '';
 
+      const maquina = s.maquinaria && s.maquinaria.trim() !== '' ? s.maquinaria.trim() : 'Sin asignar';
+      const imp = s.implemento && s.implemento.trim() !== '' ? s.implemento.trim() : '—';
+
       if (tipoReporte === 'maquinaria') {
-        cat = s.maquinaria || 'Sin asignar';
-        key = cat;
+        // REGLA: Tratar Maquinaria e Implemento como campos separados
+        cat = maquina;
+        sub = imp;
+        key = `${cat}__${sub}`;
       } else if (tipoReporte === 'maquinaria_cliente') {
-        cat = s.maquinaria || 'Sin asignar';
-        sub = `Cuenta #${s.cuenta} - ${s.cliente}`;
+        cat = maquina;
+        sub = `${imp !== '—' ? imp + ' — ' : ''}Cuenta #${s.cuenta} - ${s.cliente}`;
         key = `${cat}__${sub}`;
       } else if (tipoReporte === 'cliente') {
-        cat = `Cuenta #${s.cuenta} - ${s.cliente}`;
-        key = cat;
+        cat = `Cuenta #${s.cuenta || 'S/N'}`;
+        sub = s.cliente || 'Sin nombre';
+        key = `${cat}__${sub}`;
       } else if (tipoReporte === 'operador') {
-        cat = s.operador || 'Sin operador';
-        key = cat;
+        cat = s.operador && s.operador.trim() !== '' ? s.operador.trim() : 'Sin operador';
+        sub = imp !== '—' ? `${maquina} / ${imp}` : maquina;
+        key = `${cat}__${sub}`;
       }
 
       if (!acumulador[key]) {
@@ -101,79 +236,47 @@ export const Reportes: React.FC<ReportesProps> = ({ servicios }) => {
         };
       }
 
+      // SUMA DIRECTA de la columna Total (servicios.Total)
+      const valorTotalServicio = Number(s.total) || 0;
       acumulador[key].servicios += 1;
       acumulador[key].horas += Number(s.horas) || 0;
       acumulador[key].cantidad += Number(s.cantidad) || 0;
-      acumulador[key].total += Number(s.total) || 0;
+      acumulador[key].total += valorTotalServicio;
+
+      sumTotGeneral += valorTotalServicio;
+      sumTotHoras += Number(s.horas) || 0;
+      sumTotCantidad += Number(s.cantidad) || 0;
     }
 
-    const itemsCalculados = Object.values(acumulador).map(it => ({
-      ...it,
+    const itemsCalculados: ReporteItem[] = Object.values(acumulador).map(it => ({
+      categoria: it.categoria,
+      subcategoria: it.subcategoria,
+      servicios: it.servicios,
       horas: Math.round(it.horas * 100) / 100,
       cantidad: Math.round(it.cantidad * 100) / 100,
       total: Math.round(it.total * 100) / 100,
     }));
 
+    // Ordenar de mayor a menor por Total facturado
     itemsCalculados.sort((a, b) => b.total - a.total);
-
-    let totG = 0;
-    let totH = 0;
-    let totC = 0;
-    let totS = 0;
-
-    for (const it of itemsCalculados) {
-      totG += it.total;
-      totH += it.horas;
-      totC += it.cantidad;
-      totS += it.servicios;
-    }
 
     return {
       items: itemsCalculados,
-      totalGeneral: Math.round(totG * 100) / 100,
-      totalHoras: Math.round(totH * 100) / 100,
-      totalCantidad: Math.round(totC * 100) / 100,
-      totalServicios: totS
+      totalGeneral: Math.round(sumTotGeneral * 100) / 100,
+      totalHoras: Math.round(sumTotHoras * 100) / 100,
+      totalCantidad: Math.round(sumTotCantidad * 100) / 100,
+      totalServicios: serviciosFiltradosPorPeriodo.length
     };
-  }, [servicios, tipoReporte, anio, mes, desde, hasta]);
+  }, [serviciosFiltradosPorPeriodo, tipoReporte]);
 
   const handleLimpiarPeriodo = () => {
     setDesde('');
     setHasta('');
     setMes('TODOS');
-    setAnio('2026');
+    setAnio('TODOS');
   };
 
-  const getColumnaNombre = () => {
-    switch (tipoReporte) {
-      case 'maquinaria':
-        return 'Maquinaria';
-      case 'maquinaria_cliente':
-        return 'Maquinaria / Cliente';
-      case 'cliente':
-        return 'Cliente';
-      case 'operador':
-        return 'Operador';
-    }
-  };
-
-  // Asegurar que no quede activa ninguna clase de comprobante individual al ver Reportes
-  useEffect(() => {
-    document.body.classList.remove('comprobante-modal-open');
-  }, []);
-
-  const handleImprimirReporte = (e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    // Retirar clase para que main y el reporte no queden ocultos en la impresión
-    document.body.classList.remove('comprobante-modal-open');
-    try {
-      window.focus();
-    } catch {
-      // Ignorar si el navegador bloquea focus
-    }
+  const handleImprimirReporte = () => {
     window.print();
   };
 
@@ -190,18 +293,33 @@ export const Reportes: React.FC<ReportesProps> = ({ servicios }) => {
               <h2 className="text-base sm:text-lg font-extrabold text-slate-900">
                 Generador de Reportes
               </h2>
-              <p className="text-xs text-slate-500">Resumen consolidado y exportación para impresión</p>
+              <p className="text-xs text-slate-500">Resumen consolidado y reportes detallados con total real de Google Sheets</p>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleImprimirReporte}
-            className="h-11 px-5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2 cursor-pointer relative z-10"
-          >
-            <Printer className="w-4 h-4" />
-            <span>IMPRIMIR REPORTE</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {onRefrescarServicios && (
+              <button
+                type="button"
+                onClick={onRefrescarServicios}
+                disabled={isLoadingServicios}
+                className="h-11 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                title="Actualizar datos completos desde Google Sheets"
+              >
+                <RotateCcw className={`w-4 h-4 ${isLoadingServicios ? 'animate-spin' : ''}`} />
+                <span>{isLoadingServicios ? 'Cargando...' : 'Actualizar'}</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleImprimirReporte}
+              className="h-11 px-5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2 cursor-pointer relative z-10"
+            >
+              <Printer className="w-4 h-4" />
+              <span>IMPRIMIR REPORTE</span>
+            </button>
+          </div>
         </div>
 
         {/* Filtros de Tipo y Periodo */}
@@ -213,13 +331,16 @@ export const Reportes: React.FC<ReportesProps> = ({ servicios }) => {
             </label>
             <select
               value={tipoReporte}
-              onChange={(e) => setTipoReporte(e.target.value as TipoReporte)}
+              onChange={(e) => {
+                setTipoReporte(e.target.value as TipoReporte);
+              }}
               className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
             >
-              <option value="maquinaria">Resumen por Maquinaria</option>
-              <option value="maquinaria_cliente">Por Maquinaria y Cliente</option>
-              <option value="cliente">Resumen por Cliente</option>
-              <option value="operador">Resumen por Operador</option>
+              <option value="maquinaria">📊 Resumen por Maquinaria e Implemento</option>
+              <option value="cliente_especifico">👤 Reporte Detallado por Cliente</option>
+              <option value="cliente">👥 Resumen General por Cliente</option>
+              <option value="maquinaria_cliente">🚜 Maquinaria, Implemento y Cliente</option>
+              <option value="operador">👷 Resumen por Operador</option>
             </select>
           </div>
 
@@ -230,13 +351,14 @@ export const Reportes: React.FC<ReportesProps> = ({ servicios }) => {
             </label>
             <select
               value={anio}
-              disabled={!!(desde && hasta)}
+              disabled={!!(desde || hasta)}
               onChange={(e) => setAnio(e.target.value)}
               className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
             >
-              <option value="2025">2025</option>
+              <option value="TODOS">Todos los años</option>
               <option value="2026">2026</option>
-              <option value="2027">2027</option>
+              <option value="2025">2025</option>
+              <option value="2024">2024</option>
             </select>
           </div>
 
@@ -247,7 +369,7 @@ export const Reportes: React.FC<ReportesProps> = ({ servicios }) => {
             </label>
             <select
               value={mes}
-              disabled={!!(desde && hasta)}
+              disabled={!!(desde || hasta) || anio === 'TODOS'}
               onChange={(e) => setMes(e.target.value)}
               className="w-full h-11 px-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50"
             >
@@ -259,11 +381,11 @@ export const Reportes: React.FC<ReportesProps> = ({ servicios }) => {
             </select>
           </div>
 
-          {/* 4. Reset Button */}
+          {/* 4. Restablecer Periodo */}
           <div className="flex items-end">
             <button
               onClick={handleLimpiarPeriodo}
-              className="w-full h-11 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
+              className="w-full h-11 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
               Restablecer
@@ -271,17 +393,121 @@ export const Reportes: React.FC<ReportesProps> = ({ servicios }) => {
           </div>
         </div>
 
-        {/* Rango de fechas personalizado opcional */}
+        {/* SELECTOR EXCLUSIVO PARA REPORTE DETALLADO POR CLIENTE */}
+        {tipoReporte === 'cliente_especifico' && (
+          <div className="p-4 bg-blue-50/70 border border-blue-200 rounded-xl space-y-2">
+            <label className="block text-xs font-extrabold text-blue-900 uppercase">
+              Seleccionar Cliente para el Reporte *
+            </label>
+            <div className="relative" ref={dropdownRef}>
+              <div 
+                className="w-full min-h-11 px-3 py-2 bg-white border border-blue-300 rounded-xl flex items-center justify-between cursor-pointer focus-within:ring-2 focus-within:ring-blue-500"
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              >
+                {clienteSeleccionado ? (
+                  <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
+                    <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-mono text-xs">
+                      Cta: #{clienteSeleccionado.cuenta}
+                    </span>
+                    <span>{clienteSeleccionado.nombre}</span>
+                  </div>
+                ) : (
+                  <span className="text-slate-400 text-sm font-medium">
+                    Buscar cliente por Cuenta (ej: 148), Nombre o Apellido...
+                  </span>
+                )}
+                <div className="flex items-center gap-1 text-slate-400">
+                  {clienteSeleccionado && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setClienteSeleccionado(null);
+                        setClienteSearch('');
+                      }}
+                      className="p-1 hover:text-red-500 rounded"
+                      title="Quitar cliente seleccionado"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                  <ChevronDown className="w-4 h-4" />
+                </div>
+              </div>
+
+              {/* Menú desplegable con buscador inteligente */}
+              {isDropdownOpen && (
+                <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-72 flex flex-col overflow-hidden">
+                  <div className="p-2 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
+                    <Search className="w-4 h-4 text-slate-400 shrink-0 ml-1" />
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="Escriba número de cuenta o nombre (ej: 148, Juan, Romero)..."
+                      value={clienteSearch}
+                      onChange={(e) => setClienteSearch(e.target.value)}
+                      className="w-full text-xs sm:text-sm bg-transparent border-none outline-none font-medium"
+                    />
+                    {clienteSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setClienteSearch('')}
+                        className="text-slate-400 hover:text-slate-600 p-1"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="overflow-y-auto max-h-56 divide-y divide-slate-100 text-xs sm:text-sm">
+                    {clientesFiltrados.length === 0 ? (
+                      <div className="p-4 text-center text-slate-400">
+                        No se encontró ningún cliente con ese término de búsqueda.
+                      </div>
+                    ) : (
+                      clientesFiltrados.map((c, i) => {
+                        const esSeleccionado = clienteSeleccionado?.cuenta === c.cuenta && clienteSeleccionado?.nombre === c.nombre;
+                        return (
+                          <div
+                            key={i}
+                            onClick={() => {
+                              setClienteSeleccionado(c);
+                              setIsDropdownOpen(false);
+                            }}
+                            className={`p-2.5 px-3 flex items-center justify-between cursor-pointer transition ${
+                              esSeleccionado ? 'bg-blue-50 font-bold text-blue-700' : 'hover:bg-slate-50 text-slate-800'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <span className="font-mono text-xs bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-bold">
+                                {c.cuenta || 'S/N'}
+                              </span>
+                              <span>{c.nombre}</span>
+                            </div>
+                            {esSeleccionado && <Check className="w-4 h-4 text-blue-600" />}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Rango de fechas personalizado opcional (Desde / Hasta) */}
         <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row items-center gap-3 text-xs">
-          <span className="font-bold text-slate-500 whitespace-nowrap">O Rango Específico:</span>
+          <span className="font-bold text-slate-500 whitespace-nowrap">Filtrar por Rango Específico:</span>
           <div className="flex items-center gap-2 w-full sm:w-auto">
+            <span className="text-slate-400 text-[11px] font-bold">Desde:</span>
             <input
               type="date"
               value={desde}
               onChange={(e) => setDesde(e.target.value)}
               className="h-10 px-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition w-full sm:w-auto"
             />
-            <span className="text-slate-400">al</span>
+            <span className="text-slate-400 text-[11px] font-bold">Hasta:</span>
             <input
               type="date"
               value={hasta}
@@ -291,7 +517,7 @@ export const Reportes: React.FC<ReportesProps> = ({ servicios }) => {
           </div>
           {(desde || hasta) && (
             <span className="text-blue-600 font-bold text-[11px]">
-              (Sobrescribe filtro de mes/año)
+              (Sobrescribe filtro de mes y año)
             </span>
           )}
         </div>
@@ -307,9 +533,36 @@ export const Reportes: React.FC<ReportesProps> = ({ servicios }) => {
               <span className="text-[11px] font-black uppercase tracking-wider text-blue-700 block">
                 CONTROL DE MAQUINARIA
               </span>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
-                Reporte de Servicios: {getColumnaNombre()}
-              </h1>
+
+              {tipoReporte === 'cliente_especifico' ? (
+                <div>
+                  <h1 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
+                    REPORTE DE SERVICIOS POR CLIENTE
+                  </h1>
+                  {clienteSeleccionado ? (
+                    <div className="mt-2 text-sm font-semibold text-slate-800 space-y-0.5">
+                      <p>
+                        Cuenta: <strong className="font-mono text-blue-800 font-extrabold">{clienteSeleccionado.cuenta || 'S/N'}</strong>
+                      </p>
+                      <p>
+                        Cliente: <strong className="text-slate-900 font-extrabold">{clienteSeleccionado.nombre}</strong>
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-amber-600 font-bold mt-1">
+                      (Seleccione un cliente en el buscador superior para generar el reporte)
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
+                  {tipoReporte === 'maquinaria' && 'Reporte de Servicios: Resumen por Maquinaria e Implemento'}
+                  {tipoReporte === 'maquinaria_cliente' && 'Reporte de Servicios: Maquinaria, Implemento y Cliente'}
+                  {tipoReporte === 'cliente' && 'Reporte de Servicios: Resumen General por Cliente'}
+                  {tipoReporte === 'operador' && 'Reporte de Servicios: Resumen por Operador'}
+                </h1>
+              )}
+
               <p className="text-xs text-slate-500 mt-1 font-medium">
                 Período: <strong className="text-slate-800">{periodoTexto}</strong>
               </p>
@@ -331,119 +584,252 @@ export const Reportes: React.FC<ReportesProps> = ({ servicios }) => {
           <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs print:border print:border-slate-300 print:p-2 print:shadow-none">
             <span className="text-[10px] text-slate-500 font-bold uppercase block print:text-black">Total Servicios</span>
             <span className="text-xl font-black text-blue-900 font-mono-numbers mt-0.5 block print:text-black print:text-base">
-              {totalServicios}
+              {tipoReporte === 'cliente_especifico' ? datosReporteCliente.serviciosCliente.length : totalServicios}
             </span>
           </div>
 
           <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs print:border print:border-slate-300 print:p-2 print:shadow-none">
             <span className="text-[10px] text-slate-500 font-bold uppercase block print:text-black">Horas Totales</span>
             <span className="text-xl font-black text-blue-700 font-mono-numbers mt-0.5 block print:text-black print:text-base">
-              {formatNumber(totalHoras, 2)} hrs
+              {formatNumber(tipoReporte === 'cliente_especifico' ? datosReporteCliente.totalHorasCliente : totalHoras, 2)} hrs
             </span>
           </div>
 
           <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs print:border print:border-slate-300 print:p-2 print:shadow-none">
             <span className="text-[10px] text-slate-500 font-bold uppercase block print:text-black">Otras Cantidades</span>
             <span className="text-xl font-black text-slate-700 font-mono-numbers mt-0.5 block print:text-black print:text-base">
-              {formatNumber(totalCantidad, 2)}
+              {formatNumber(tipoReporte === 'cliente_especifico' ? datosReporteCliente.totalCantidadCliente : totalCantidad, 2)}
             </span>
           </div>
 
           <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs print:border print:border-slate-300 print:p-2 print:shadow-none">
-            <span className="text-[10px] text-slate-500 font-bold uppercase block print:text-black">Total Facturado</span>
+            <span className="text-[10px] text-slate-500 font-bold uppercase block print:text-black">
+              {tipoReporte === 'cliente_especifico' ? 'Total General del Cliente' : 'Total Facturado'}
+            </span>
             <span className="text-xl font-black text-emerald-600 font-mono-numbers mt-0.5 block print:text-black print:text-base">
-              {formatCurrency(totalGeneral)}
+              {formatCurrency(tipoReporte === 'cliente_especifico' ? datosReporteCliente.totalGeneralCliente : totalGeneral)}
             </span>
           </div>
         </div>
 
-        {/* Tabla Detallada del Reporte */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs divide-y divide-slate-200 print-table">
-            <thead className="bg-[#0a2342] text-white">
-              <tr>
-                <th className="px-4 py-3 font-bold uppercase tracking-wider">
-                  {getColumnaNombre()}
-                </th>
-                {tipoReporte === 'maquinaria_cliente' && (
-                  <th className="px-4 py-3 font-bold uppercase tracking-wider">
-                    Cliente / Cuenta
-                  </th>
-                )}
-                <th className="px-4 py-3 font-bold uppercase tracking-wider text-center">
-                  Servicios
-                </th>
-                <th className="px-4 py-3 font-bold uppercase tracking-wider text-right">
-                  Horas
-                </th>
-                <th className="px-4 py-3 font-bold uppercase tracking-wider text-right">
-                  Cantidad
-                </th>
-                <th className="px-4 py-3 font-bold uppercase tracking-wider text-right">
-                  Total
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-800">
-              {items.length === 0 ? (
-                <tr>
-                  <td colSpan={tipoReporte === 'maquinaria_cliente' ? 6 : 5} className="p-8 text-center text-slate-400">
-                    No se registran servicios para el período seleccionado.
-                  </td>
-                </tr>
-              ) : (
-                items.map((item, idx) => (
-                  <tr key={idx} className="hover:bg-blue-50/50">
-                    <td className="px-4 py-3 font-bold text-slate-900">
-                      {item.categoria}
-                    </td>
-                    {tipoReporte === 'maquinaria_cliente' && (
-                      <td className="px-4 py-3 text-slate-600">
-                        {item.subcategoria || '-'}
+        {/* ========================================================================= */}
+        {/* VISTA 1: TABLA DETALLADA PARA "REPORTE POR CLIENTE" (13 COLUMNAS EXACTAS) */}
+        {/* ========================================================================= */}
+        {tipoReporte === 'cliente_especifico' ? (
+          <div className="overflow-x-auto">
+            {!clienteSeleccionado ? (
+              <div className="p-12 text-center text-slate-400 space-y-3">
+                <User className="w-12 h-12 text-slate-300 mx-auto" />
+                <h3 className="text-base font-bold text-slate-600">Ningún cliente seleccionado</h3>
+                <p className="text-xs text-slate-400 max-w-md mx-auto">
+                  Utilice el buscador superior para seleccionar un cliente por número de cuenta (ej. 148), nombre o apellido.
+                </p>
+              </div>
+            ) : datosReporteCliente.serviciosCliente.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 font-medium">
+                No se registran servicios para {clienteSeleccionado.nombre} en el período seleccionado ({periodoTexto}).
+              </div>
+            ) : (
+              <table className="w-full text-left text-xs divide-y divide-slate-200 print-table">
+                <thead className="bg-[#0a2342] text-white">
+                  <tr>
+                    <th className="px-3 py-3 font-bold uppercase tracking-wider">Nro. Servicio</th>
+                    <th className="px-3 py-3 font-bold uppercase tracking-wider">Fecha</th>
+                    <th className="px-3 py-3 font-bold uppercase tracking-wider">Maquinaria</th>
+                    <th className="px-3 py-3 font-bold uppercase tracking-wider">Implemento</th>
+                    <th className="px-3 py-3 font-bold uppercase tracking-wider">Operador</th>
+                    <th className="px-3 py-3 font-bold uppercase tracking-wider text-center">Tipo</th>
+                    <th className="px-3 py-3 font-bold uppercase tracking-wider text-center">Inicio</th>
+                    <th className="px-3 py-3 font-bold uppercase tracking-wider text-center">Fin</th>
+                    <th className="px-3 py-3 font-bold uppercase tracking-wider text-right">Cantidad</th>
+                    <th className="px-3 py-3 font-bold uppercase tracking-wider text-center">Unidad</th>
+                    <th className="px-3 py-3 font-bold uppercase tracking-wider text-right">Horas</th>
+                    <th className="px-3 py-3 font-bold uppercase tracking-wider text-right">Precio</th>
+                    <th className="px-3 py-3 font-bold uppercase tracking-wider text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-800">
+                  {datosReporteCliente.serviciosCliente.map((s, idx) => (
+                    <tr key={idx} className="hover:bg-blue-50/50">
+                      <td className="px-3 py-2.5 font-mono font-bold text-blue-900 whitespace-nowrap">
+                        {s.nroServicio}
                       </td>
-                    )}
-                    <td className="px-4 py-3 font-mono font-bold text-center text-slate-700">
-                      {item.servicios}
+                      <td className="px-3 py-2.5 whitespace-nowrap font-medium text-slate-600">
+                        {formatDateDisplay(s.fecha)}
+                      </td>
+                      <td className="px-3 py-2.5 font-bold text-slate-900 whitespace-nowrap">
+                        {s.maquinaria}
+                      </td>
+                      <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">
+                        {s.implemento && s.implemento.trim() !== '' ? s.implemento : '—'}
+                      </td>
+                      <td className="px-3 py-2.5 text-slate-700 whitespace-nowrap">
+                        {s.operador}
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-slate-500">
+                        {s.tipo || '—'}
+                      </td>
+                      <td className="px-3 py-2.5 text-center font-mono text-slate-600">
+                        {s.inicio || '—'}
+                      </td>
+                      <td className="px-3 py-2.5 text-center font-mono text-slate-600">
+                        {s.fin || '—'}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono font-medium text-slate-700">
+                        {s.cantidad ? formatNumber(s.cantidad, 2) : '—'}
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-slate-500 font-semibold">
+                        {s.unidad}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono font-bold text-slate-800">
+                        {s.horas ? formatNumber(s.horas, 2) : '—'}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono text-slate-600">
+                        {formatCurrency(s.precio)}
+                      </td>
+                      {/* Total directo de servicios.Total */}
+                      <td className="px-3 py-2.5 text-right font-mono font-black text-emerald-600 whitespace-nowrap">
+                        {formatCurrency(s.total)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-slate-100/90 font-black border-t-2 border-slate-300">
+                  <tr>
+                    <td 
+                      colSpan={8} 
+                      className="px-3 py-3.5 text-slate-900 uppercase font-black tracking-wider text-xs sm:text-sm"
+                    >
+                      TOTAL GENERAL DEL CLIENTE
                     </td>
-                    <td className="px-4 py-3 font-mono text-right font-semibold text-slate-700">
-                      {formatNumber(item.horas, 2)}
+                    <td className="px-3 py-3.5 text-right font-mono font-extrabold text-slate-800">
+                      {formatNumber(datosReporteCliente.totalCantidadCliente, 2)}
                     </td>
-                    <td className="px-4 py-3 font-mono text-right text-slate-600">
-                      {formatNumber(item.cantidad, 2)}
+                    <td className="px-3 py-3.5 text-center font-semibold text-slate-500">
+                      —
                     </td>
-                    <td className="px-4 py-3 font-mono font-black text-right text-emerald-600">
-                      {formatCurrency(item.total)}
+                    <td className="px-3 py-3.5 text-right font-mono font-extrabold text-blue-900">
+                      {formatNumber(datosReporteCliente.totalHorasCliente, 2)}
+                    </td>
+                    <td className="px-3 py-3.5 text-right font-semibold text-slate-500">
+                      —
+                    </td>
+                    <td className="px-3 py-3.5 text-right font-mono font-black text-emerald-700 text-sm sm:text-base whitespace-nowrap">
+                      {formatCurrency(datosReporteCliente.totalGeneralCliente)}
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-            {items.length > 0 && (
-              <tfoot className="bg-slate-100/90 font-black border-t-2 border-slate-300">
-                <tr>
-                  <td 
-                    colSpan={tipoReporte === 'maquinaria_cliente' ? 2 : 1} 
-                    className="px-4 py-3.5 text-slate-900 uppercase font-extrabold tracking-wider"
-                  >
-                    TOTAL GENERAL CONSOLIDADO
-                  </td>
-                  <td className="px-4 py-3.5 text-center font-mono font-extrabold text-blue-900">
-                    {totalServicios}
-                  </td>
-                  <td className="px-4 py-3.5 text-right font-mono font-extrabold text-blue-900">
-                    {formatNumber(totalHoras, 2)}
-                  </td>
-                  <td className="px-4 py-3.5 text-right font-mono font-extrabold text-slate-800">
-                    {formatNumber(totalCantidad, 2)}
-                  </td>
-                  <td className="px-4 py-3.5 text-right font-mono font-black text-emerald-700 text-sm">
-                    {formatCurrency(totalGeneral)}
-                  </td>
-                </tr>
-              </tfoot>
+                </tfoot>
+              </table>
             )}
-          </table>
-        </div>
+          </div>
+        ) : (
+          /* ========================================================================= */
+          /* VISTA 2: TABLAS CONSOLIDADAS (MAQUINARIA E IMPLEMENTO, CLIENTE, OPERADOR)   */
+          /* ========================================================================= */
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs divide-y divide-slate-200 print-table">
+              <thead className="bg-[#0a2342] text-white">
+                <tr>
+                  <th className="px-4 py-3 font-bold uppercase tracking-wider">
+                    {tipoReporte === 'maquinaria' && 'Maquinaria'}
+                    {tipoReporte === 'maquinaria_cliente' && 'Maquinaria'}
+                    {tipoReporte === 'cliente' && 'Cuenta'}
+                    {tipoReporte === 'operador' && 'Operador'}
+                  </th>
+                  {tipoReporte === 'maquinaria' && (
+                    <th className="px-4 py-3 font-bold uppercase tracking-wider">
+                      Implemento
+                    </th>
+                  )}
+                  {tipoReporte === 'maquinaria_cliente' && (
+                    <th className="px-4 py-3 font-bold uppercase tracking-wider">
+                      Implemento / Cliente
+                    </th>
+                  )}
+                  {tipoReporte === 'cliente' && (
+                    <th className="px-4 py-3 font-bold uppercase tracking-wider">
+                      Cliente
+                    </th>
+                  )}
+                  {tipoReporte === 'operador' && (
+                    <th className="px-4 py-3 font-bold uppercase tracking-wider">
+                      Maquinaria e Implemento
+                    </th>
+                  )}
+                  <th className="px-4 py-3 font-bold uppercase tracking-wider text-center">
+                    Servicios
+                  </th>
+                  <th className="px-4 py-3 font-bold uppercase tracking-wider text-right">
+                    Horas
+                  </th>
+                  <th className="px-4 py-3 font-bold uppercase tracking-wider text-right">
+                    Cantidad
+                  </th>
+                  <th className="px-4 py-3 font-bold uppercase tracking-wider text-right">
+                    Total
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-800">
+                {items.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-slate-400">
+                      No se registran servicios para el período seleccionado ({periodoTexto}).
+                    </td>
+                  </tr>
+                ) : (
+                  items.map((item, idx) => (
+                    <tr key={idx} className="hover:bg-blue-50/50">
+                      <td className="px-4 py-3 font-bold text-slate-900">
+                        {item.categoria}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {item.subcategoria || '—'}
+                      </td>
+                      <td className="px-4 py-3 font-mono font-bold text-center text-slate-700">
+                        {item.servicios}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-right font-semibold text-slate-700">
+                        {formatNumber(item.horas, 2)}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-right text-slate-600">
+                        {formatNumber(item.cantidad, 2)}
+                      </td>
+                      {/* Total obtenido DIRECTAMENTE de la suma de s.total */}
+                      <td className="px-4 py-3 font-mono font-black text-right text-emerald-600">
+                        {formatCurrency(item.total)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              {items.length > 0 && (
+                <tfoot className="bg-slate-100/90 font-black border-t-2 border-slate-300">
+                  <tr>
+                    <td 
+                      colSpan={2} 
+                      className="px-4 py-3.5 text-slate-900 uppercase font-extrabold tracking-wider"
+                    >
+                      TOTAL GENERAL CONSOLIDADO
+                    </td>
+                    <td className="px-4 py-3.5 text-center font-mono font-extrabold text-blue-900">
+                      {totalServicios}
+                    </td>
+                    <td className="px-4 py-3.5 text-right font-mono font-extrabold text-blue-900">
+                      {formatNumber(totalHoras, 2)}
+                    </td>
+                    <td className="px-4 py-3.5 text-right font-mono font-extrabold text-slate-800">
+                      {formatNumber(totalCantidad, 2)}
+                    </td>
+                    <td className="px-4 py-3.5 text-right font-mono font-black text-emerald-700 text-sm">
+                      {formatCurrency(totalGeneral)}
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        )}
 
         {/* Pie de Impresión */}
         <div className="p-6 border-t border-slate-200 text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -451,7 +837,7 @@ export const Reportes: React.FC<ReportesProps> = ({ servicios }) => {
             <strong>CONTROL DE MAQUINARIA</strong> — Sistema de Gestión Oficial
           </div>
           <div>
-            Documento de control interno generado automáticamente
+            Totales calculados directamente desde la columna Total de Google Sheets
           </div>
         </div>
       </div>

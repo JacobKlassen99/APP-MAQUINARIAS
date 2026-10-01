@@ -77,8 +77,9 @@ export interface ReporteItem {
 
 export type TipoReporte = 
   | 'maquinaria' 
-  | 'maquinaria_cliente' 
+  | 'cliente_especifico'
   | 'cliente' 
+  | 'maquinaria_cliente' 
   | 'operador';
 
 export interface DashboardStats {

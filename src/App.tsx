@@ -114,25 +114,30 @@ export default function App() {
     cargarTodo();
   }, [cargarTodo]);
 
+  const [isLoadingReportes, setIsLoadingReportes] = useState<boolean>(false);
+
+  // 📊 REPORTES: Carga todos los registros necesarios sin paginación para estadísticas completas
+  const cargarServiciosReportes = useCallback(async (forzar = false) => {
+    if (!forzar && servicios.length > 0) return;
+    setIsLoadingReportes(true);
+    try {
+      const res = await gasService.obtenerServicios();
+      if (Array.isArray(res)) {
+        setServicios(ordenarServiciosDesc(res));
+      }
+    } catch (err) {
+      console.error('Error al cargar servicios completos para reportes:', err);
+    } finally {
+      setIsLoadingReportes(false);
+    }
+  }, [servicios.length]);
+
   // When switching tabs, clean any modal state and re-query Google Sheets
   const handleSelectTab = (tab: TabType) => {
     document.body.classList.remove('comprobante-modal-open');
     setActiveTab(tab);
     if (tab === 'reportes') {
-      // 📊 REPORTES: Carga todos los registros necesarios para estadísticas completas
-      if (servicios.length === 0) {
-        setIsLoading(true);
-        gasService.obtenerServicios()
-          .then(res => {
-            if (Array.isArray(res)) setServicios(ordenarServiciosDesc(res));
-          })
-          .catch(err => {
-            console.error('Error al cargar servicios completos para reportes:', err);
-          })
-          .finally(() => {
-            setIsLoading(false);
-          });
-      }
+      cargarServiciosReportes();
     } else if (tab === 'dashboard') {
       gasService.obtenerDashboard()
         .then(d => {
@@ -155,10 +160,23 @@ export default function App() {
         showToast(res.mensaje || 'Servicio guardado correctamente en Google Sheets.', 'ok');
         setServicioEdicion(null);
 
-        // Immediately refresh state directly from Google Sheets
-        await cargarTodo(true);
+        // Si se guardó un nuevo servicio, actualizar correlativo SERV-
+        if (res.nroServicio && res.nroServicio.toUpperCase().startsWith('SERV-')) {
+          const match = res.nroServicio.toUpperCase().match(/^SERV-(\d+)/);
+          if (match) {
+            const nextId = parseInt(match[1], 10) + 1;
+            setUltimoNumero(res.nroServicio);
+            setSiguienteNumero('SERV-' + ('000000' + nextId).slice(-6));
+          }
+        }
 
-        // Switch to Registros to inspect the newly recorded service
+        // Refrescar datos en segundo plano
+        cargarTodo(true);
+        if (servicios.length > 0) {
+          cargarServiciosReportes(true);
+        }
+
+        // Cambiar a Registros para inspeccionar el nuevo servicio en la cima
         setActiveTab('registros');
       } else {
         const errorMsg = res?.mensaje || 'No se pudo guardar el servicio en Google Sheets.';
@@ -180,6 +198,9 @@ export default function App() {
       if (res && (res.exito || res.ok)) {
         showToast(res.mensaje || 'Servicio eliminado correctamente de Google Sheets.', 'ok');
         await cargarTodo(true);
+        if (servicios.length > 0) {
+          cargarServiciosReportes(true);
+        }
       } else {
         showToast(`No se pudo eliminar: ${res?.mensaje || 'Error desconocido'}`, 'error');
       }
@@ -377,7 +398,12 @@ export default function App() {
           )}
 
           {activeTab === 'reportes' && (
-            <Reportes servicios={servicios} />
+            <Reportes 
+              servicios={servicios} 
+              clientes={clientes} 
+              onRefrescarServicios={() => cargarServiciosReportes(true)}
+              isLoadingServicios={isLoadingReportes}
+            />
           )}
 
           {activeTab === 'config' && (

@@ -127,22 +127,43 @@ export function parseNumeroServicio(nro: string): number {
 }
 
 /**
- * Ordena servicios de forma descendente (más reciente primero).
- * Criterio principal: Número de servicio correlativo (SERV-000004 > SERV-000003).
- * Criterio secundario: Fecha descendente.
- * Criterio terciario: Fila de Google Sheets descendente.
+ * Ordena servicios siguiendo la regla oficial del sistema:
+ * 1. Primero todos los registros nuevos que comienzan con SERV-
+ * 2. Dentro de SERV-, del número más alto al más bajo (SERV-000009 > SERV-000008 > ... > SERV-000001)
+ * 3. Después todos los registros históricos que comienzan con REC-
+ * 4. Dentro de REC-, del número más alto al más bajo (REC-000940 > REC-000939 > ... > REC-000001)
+ * 5. Otros formatos al final, del número más alto al más bajo.
+ * 6. Desempate secundario por fecha descendente y fila de Google Sheets.
  */
 export function ordenarServiciosDesc(items: Servicio[]): Servicio[] {
   if (!Array.isArray(items)) return [];
   return [...items].sort((a, b) => {
-    const numA = parseInt(String(a.nroServicio || a.numero || '').replace(/\D/g, ''), 10) || 0;
-    const numB = parseInt(String(b.nroServicio || b.numero || '').replace(/\D/g, ''), 10) || 0;
-    if (numB !== numA) {
+    const nroA = String(a.nroServicio || a.numero || '').trim().toUpperCase();
+    const nroB = String(b.nroServicio || b.numero || '').trim().toUpperCase();
+
+    const esServA = nroA.startsWith('SERV-');
+    const esServB = nroB.startsWith('SERV-');
+    const esRecA = nroA.startsWith('REC-');
+    const esRecB = nroB.startsWith('REC-');
+
+    const tierA = esServA ? 1 : (esRecA ? 2 : 3);
+    const tierB = esServB ? 1 : (esRecB ? 2 : 3);
+
+    if (tierA !== tierB) {
+      return tierA - tierB;
+    }
+
+    const numA = parseInt(nroA.replace(/\D/g, ''), 10) || 0;
+    const numB = parseInt(nroB.replace(/\D/g, ''), 10) || 0;
+
+    if (numA !== numB) {
       return numB - numA;
     }
+
     if (b.fecha && a.fecha && b.fecha !== a.fecha) {
       return b.fecha.localeCompare(a.fecha);
     }
+
     return (b.fila || 0) - (a.fila || 0);
   });
 }

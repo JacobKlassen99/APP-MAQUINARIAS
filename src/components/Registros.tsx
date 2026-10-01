@@ -74,7 +74,7 @@ export const Registros: React.FC<RegistrosProps> = ({
 
       const res = await gasService.obtenerServiciosPaginados({
         page: pagina,
-        limit: 200,
+        limit: 100,
         busqueda: q,
         desde: d,
         hasta: h,
@@ -169,9 +169,10 @@ export const Registros: React.FC<RegistrosProps> = ({
     }
   };
 
-  // Range text calculations (e.g. "Mostrando 1–200 de 940 registros" or "Mostrando 801–940 de 940 registros")
-  const inicioRegistro = totalRegistros === 0 ? 0 : (paginaActual - 1) * 200 + 1;
-  const finRegistro = Math.min(paginaActual * 200, totalRegistros);
+  // Range text calculations (e.g. "Mostrando 1–100 de 948 registros" o "Mostrando 901–948 de 948 registros")
+  const ITEMS_POR_PAGINA = 100;
+  const inicioRegistro = totalRegistros === 0 ? 0 : (paginaActual - 1) * ITEMS_POR_PAGINA + 1;
+  const finRegistro = Math.min(paginaActual * ITEMS_POR_PAGINA, totalRegistros);
 
   // Generate pagination buttons array (e.g. [1, 2, 3, 4, 5] for 940 records)
   const generarNumerosPagina = (actual: number, totalPags: number): (number | string)[] => {
