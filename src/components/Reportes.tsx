@@ -142,7 +142,7 @@ export const Reportes: React.FC<ReportesProps> = ({
   // CÁLCULO ESPECÍFICO: REPORTE DETALLADO POR CLIENTE
   const datosReporteCliente = useMemo(() => {
     if (tipoReporte !== 'cliente_especifico' || !clienteSeleccionado) {
-      return { serviciosCliente: [], totalGeneralCliente: 0, totalHorasCliente: 0, totalCantidadCliente: 0 };
+      return { serviciosCliente: [], totalGeneralCliente: 0, totalHorasCliente: 0, totalCantidadCliente: 0, resumenJerarquico: [] };
     }
 
     // Filtrar estrictamente los servicios de ese cliente
@@ -160,22 +160,92 @@ export const Reportes: React.FC<ReportesProps> = ({
     // Ordenar con la regla oficial (SERV- descendente primero, luego REC- descendente)
     const ordenados = ordenarServiciosDesc(deEsteCliente);
 
-    // TOTAL GENERAL DEL CLIENTE: SUMA DIRECTA de la columna Total
+    // Agrupación jerárquica: Maquinaria -> Implemento
+    const maquinasMap = new Map<string, {
+      maquinaria: string;
+      implementosMap: Map<string, {
+        implemento: string;
+        total: number;
+        serviciosCount: number;
+        horas: number;
+        cantidad: number;
+      }>;
+      totalMaquinaria: number;
+      totalServicios: number;
+      totalHoras: number;
+      totalCantidad: number;
+    }>();
+
     let sumTotal = 0;
     let sumHoras = 0;
     let sumCant = 0;
 
     for (const s of ordenados) {
-      sumTotal += Number(s.total) || 0;
-      sumHoras += Number(s.horas) || 0;
-      sumCant += Number(s.cantidad) || 0;
+      const valorTotal = Number(s.total) || 0;
+      const valorHoras = Number(s.horas) || 0;
+      const valorCant = Number(s.cantidad) || 0;
+
+      sumTotal += valorTotal;
+      sumHoras += valorHoras;
+      sumCant += valorCant;
+
+      const maq = (s.maquinaria && s.maquinaria.trim() !== '') ? s.maquinaria.trim() : 'Sin asignar';
+      const imp = (s.implemento && s.implemento.trim() !== '') ? s.implemento.trim() : '—';
+
+      if (!maquinasMap.has(maq)) {
+        maquinasMap.set(maq, {
+          maquinaria: maq,
+          implementosMap: new Map(),
+          totalMaquinaria: 0,
+          totalServicios: 0,
+          totalHoras: 0,
+          totalCantidad: 0,
+        });
+      }
+
+      const maqEntry = maquinasMap.get(maq)!;
+      maqEntry.totalMaquinaria += valorTotal;
+      maqEntry.totalServicios += 1;
+      maqEntry.totalHoras += valorHoras;
+      maqEntry.totalCantidad += valorCant;
+
+      if (!maqEntry.implementosMap.has(imp)) {
+        maqEntry.implementosMap.set(imp, {
+          implemento: imp,
+          total: 0,
+          serviciosCount: 0,
+          horas: 0,
+          cantidad: 0,
+        });
+      }
+
+      const impEntry = maqEntry.implementosMap.get(imp)!;
+      impEntry.total += valorTotal;
+      impEntry.serviciosCount += 1;
+      impEntry.horas += valorHoras;
+      impEntry.cantidad += valorCant;
     }
+
+    const resumenJerarquico = Array.from(maquinasMap.values()).map(m => ({
+      maquinaria: m.maquinaria,
+      implementos: Array.from(m.implementosMap.values()).map(imp => ({
+        ...imp,
+        total: Math.round(imp.total * 100) / 100,
+        horas: Math.round(imp.horas * 100) / 100,
+        cantidad: Math.round(imp.cantidad * 100) / 100,
+      })),
+      totalMaquinaria: Math.round(m.totalMaquinaria * 100) / 100,
+      totalServicios: m.totalServicios,
+      totalHoras: Math.round(m.totalHoras * 100) / 100,
+      totalCantidad: Math.round(m.totalCantidad * 100) / 100,
+    }));
 
     return {
       serviciosCliente: ordenados,
       totalGeneralCliente: Math.round(sumTotal * 100) / 100,
       totalHorasCliente: Math.round(sumHoras * 100) / 100,
-      totalCantidadCliente: Math.round(sumCant * 100) / 100
+      totalCantidadCliente: Math.round(sumCant * 100) / 100,
+      resumenJerarquico
     };
   }, [tipoReporte, clienteSeleccionado, serviciosFiltradosPorPeriodo]);
 
@@ -613,10 +683,10 @@ export const Reportes: React.FC<ReportesProps> = ({
         </div>
 
         {/* ========================================================================= */}
-        {/* VISTA 1: TABLA DETALLADA PARA "REPORTE POR CLIENTE" (13 COLUMNAS EXACTAS) */}
+        {/* VISTA 1: REPORTE POR CLIENTE (RESUMEN JERÁRQUICO + DETALLE DE SERVICIOS)   */}
         {/* ========================================================================= */}
         {tipoReporte === 'cliente_especifico' ? (
-          <div className="overflow-x-auto">
+          <div>
             {!clienteSeleccionado ? (
               <div className="p-12 text-center text-slate-400 space-y-3">
                 <User className="w-12 h-12 text-slate-300 mx-auto" />
@@ -630,7 +700,102 @@ export const Reportes: React.FC<ReportesProps> = ({
                 No se registran servicios para {clienteSeleccionado.nombre} en el período seleccionado ({periodoTexto}).
               </div>
             ) : (
-              <table className="w-full text-left text-xs divide-y divide-slate-200 print-table">
+              <div>
+                {/* 1. SECCIÓN DE RESUMEN POR MAQUINARIA E IMPLEMENTO (JERÁRQUICA) */}
+                <div className="p-4 sm:p-6 bg-slate-50/70 border-b border-slate-200 print:bg-white print:p-4 print:border-slate-300">
+                  <div className="max-w-3xl mx-auto bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden print:border print:border-slate-400 print:shadow-none">
+                    {/* Título de la sección */}
+                    <div className="bg-[#0a2342] text-white px-5 py-3 flex items-center justify-between print:bg-slate-900">
+                      <h2 className="text-xs sm:text-sm font-black uppercase tracking-wider flex items-center gap-2">
+                        <Layers className="w-4 h-4 text-blue-300 print:hidden" />
+                        <span>RESUMEN POR MAQUINARIA E IMPLEMENTO</span>
+                      </h2>
+                      <span className="text-[11px] text-blue-200 font-medium print:text-slate-300">
+                        {datosReporteCliente.resumenJerarquico.length} Maquinarias utilizadas
+                      </span>
+                    </div>
+
+                    {/* Lista jerárquica con subtotales */}
+                    <div className="p-4 sm:p-6 divide-y divide-slate-100 print:divide-slate-200 space-y-5">
+                      {datosReporteCliente.resumenJerarquico.map((m, mIdx) => (
+                        <div key={mIdx} className={mIdx > 0 ? "pt-5" : ""}>
+                          {/* Nombre de la Maquinaria */}
+                          <div className="flex items-center gap-2 mb-2.5">
+                            <Tractor className="w-4 h-4 text-blue-700 print:hidden shrink-0" />
+                            <span className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                              {m.maquinaria}
+                            </span>
+                          </div>
+
+                          {/* Lista de implementos */}
+                          <div className="space-y-1.5 pl-4 sm:pl-6 text-xs sm:text-sm">
+                            {m.implementos.map((imp, impIdx) => (
+                              <div key={impIdx} className="flex items-baseline justify-between gap-2 text-slate-700">
+                                <div className="flex items-baseline gap-2 min-w-0">
+                                  <span className="text-slate-400 font-mono">•</span>
+                                  <span className="font-semibold text-slate-800">
+                                    {imp.implemento}
+                                  </span>
+                                  {imp.horas > 0 && (
+                                    <span className="text-[11px] text-slate-400 font-mono hidden sm:inline">
+                                      ({formatNumber(imp.horas, 2)} hrs)
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Línea punteada que conecta con el subtotal */}
+                                <div className="flex-1 border-b border-dotted border-slate-300 mx-2 relative top-[-4px] print:border-slate-400" />
+
+                                {/* Subtotal del implemento calculado estrictamente con suma de servicios.Total */}
+                                <span className="font-mono font-bold text-slate-900 whitespace-nowrap">
+                                  {formatCurrency(imp.total)}
+                                </span>
+                              </div>
+                            ))}
+
+                            {/* Total de la maquinaria */}
+                            <div className="flex items-baseline justify-between gap-2 pt-2 mt-1 border-t border-slate-200 font-black text-slate-900 print:border-slate-300">
+                              <span className="text-xs uppercase tracking-wider text-slate-900">
+                                TOTAL {m.maquinaria}
+                              </span>
+                              <div className="flex-1 border-b border-dotted border-slate-400 mx-2 relative top-[-4px]" />
+                              <span className="font-mono text-sm sm:text-base font-black text-blue-900 whitespace-nowrap">
+                                {formatCurrency(m.totalMaquinaria)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* TOTAL GENERAL */}
+                      <div className="pt-5 mt-4 border-t-2 border-slate-900 bg-slate-50/80 -mx-4 -mb-4 sm:-mx-6 sm:-mb-6 p-4 sm:p-5 print:bg-white print:border-t-2 print:border-black">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="text-sm sm:text-base font-black uppercase tracking-wider text-slate-950">
+                            TOTAL GENERAL
+                          </span>
+                          <div className="flex-1 border-b border-dotted border-slate-500 mx-2 relative top-[-4px]" />
+                          <span className="font-mono text-base sm:text-lg font-black text-emerald-700 whitespace-nowrap print:text-black">
+                            {formatCurrency(datosReporteCliente.totalGeneralCliente)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. ENCABEZADO DE LA TABLA DETALLADA DE SERVICIOS */}
+                <div className="px-6 py-4 bg-slate-100/70 border-b border-slate-200 flex items-center justify-between print:bg-slate-100 print:py-2 print:border-slate-300">
+                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                    DETALLE DE SERVICIOS DEL CLIENTE ({datosReporteCliente.serviciosCliente.length} SERVICIOS)
+                  </h3>
+                  <span className="text-[11px] text-slate-500 font-medium print:hidden">
+                    Ordenados del más reciente al más antiguo
+                  </span>
+                </div>
+
+                {/* 3. TABLA CON LAS 13 COLUMNAS COMPLETAS */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs divide-y divide-slate-200 print-table">
                 <thead className="bg-[#0a2342] text-white">
                   <tr>
                     <th className="px-3 py-3 font-bold uppercase tracking-wider">Nro. Servicio</th>
@@ -720,9 +885,11 @@ export const Reportes: React.FC<ReportesProps> = ({
                   </tr>
                 </tfoot>
               </table>
-            )}
+            </div>
           </div>
-        ) : (
+        )}
+      </div>
+    ) : (
           /* ========================================================================= */
           /* VISTA 2: TABLAS CONSOLIDADAS (MAQUINARIA E IMPLEMENTO, CLIENTE, OPERADOR)   */
           /* ========================================================================= */
