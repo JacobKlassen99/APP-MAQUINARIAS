@@ -279,3 +279,38 @@ export function coincideCliente(
   return false;
 }
 
+/**
+ * Realiza un ordenamiento numérico natural por número de cuenta (de menor a mayor).
+ * Cuentas numéricas: 1, 2, 10, 25, 100, 125, 148, 1000...
+ * Cuentas vacías o no numéricas (ej. "S/N", "") van al final sin producir errores.
+ */
+export function compararCuentas(
+  cuentaA?: string | number | null,
+  cuentaB?: string | number | null
+): number {
+  const strA = String(cuentaA ?? '').trim();
+  const strB = String(cuentaB ?? '').trim();
+  if (strA === strB) return 0;
+
+  const soloDigitosA = strA.replace(/[^0-9]/g, '');
+  const soloDigitosB = strB.replace(/[^0-9]/g, '');
+
+  const numA = soloDigitosA !== '' ? parseInt(soloDigitosA, 10) : NaN;
+  const numB = soloDigitosB !== '' ? parseInt(soloDigitosB, 10) : NaN;
+
+  const esValidoA = !isNaN(numA);
+  const esValidoB = !isNaN(numB);
+
+  if (esValidoA && esValidoB) {
+    if (numA !== numB) return numA - numB;
+    return strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' });
+  }
+
+  // Las cuentas numéricas válidas van primero
+  if (esValidoA && !esValidoB) return -1;
+  if (!esValidoA && esValidoB) return 1;
+
+  // Si ninguna es numérica
+  return strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' });
+}
+

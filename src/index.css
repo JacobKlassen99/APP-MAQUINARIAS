@@ -41,14 +41,14 @@ footer[class*="netlify"] {
 
 @media print {
   @page {
-    size: auto;
-    margin: 10mm;
+    size: landscape;
+    margin: 8mm;
   }
 
   html, body {
     background: #ffffff !important;
     color: #000000 !important;
-    font-size: 9.5pt !important;
+    font-size: 9pt !important;
     padding: 0 !important;
     margin: 0 !important;
     height: auto !important;

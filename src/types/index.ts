@@ -69,6 +69,11 @@ export interface RespuestaPaginada<T> {
 export interface ReporteItem {
   categoria: string;
   subcategoria?: string;
+  maquinaria?: string;
+  implemento?: string;
+  cuenta?: string;
+  cliente?: string;
+  operador?: string;
   servicios: number;
   horas: number;
   cantidad: number;

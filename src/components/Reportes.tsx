@@ -22,7 +22,8 @@ import {
   formatNumber, 
   formatDateDisplay, 
   coincideCliente, 
-  ordenarServiciosDesc 
+  ordenarServiciosDesc,
+  compararCuentas
 } from '../utils/formatters';
 
 interface ReportesProps {
@@ -261,56 +262,75 @@ export const Reportes: React.FC<ReportesProps> = ({
     };
   }, [tipoReporte, clienteSeleccionado, serviciosFiltradosPorPeriodo]);
 
-  // CÁLCULO DE REPORTES AGRUPADOS (Maquinaria e Implemento, Cliente, Operador)
+  // CÁLCULO DE REPORTES AGRUPADOS (Maquinaria e Implemento, Cliente, Maquinaria/Cliente, Operador)
   const { items, totalGeneral, totalHoras, totalCantidad, totalServicios } = useMemo(() => {
     if (tipoReporte === 'cliente_especifico') {
       return { items: [], totalGeneral: 0, totalHoras: 0, totalCantidad: 0, totalServicios: 0 };
     }
 
-    const acumulador: Record<string, {
-      categoria: string;
-      subcategoria?: string;
-      servicios: number;
-      horas: number;
-      cantidad: number;
-      total: number;
-    }> = {};
+    const acumulador: Record<string, ReporteItem> = {};
 
     let sumTotGeneral = 0;
     let sumTotHoras = 0;
     let sumTotCantidad = 0;
 
     for (const s of serviciosFiltradosPorPeriodo) {
-      let cat = '';
-      let sub: string | undefined = undefined;
-      let key = '';
-
       const maquina = s.maquinaria && s.maquinaria.trim() !== '' ? s.maquinaria.trim() : 'Sin asignar';
       const imp = s.implemento && s.implemento.trim() !== '' ? s.implemento.trim() : '—';
+      const cta = s.cuenta && String(s.cuenta).trim() !== '' ? String(s.cuenta).trim() : 'S/N';
+      const cli = s.cliente && s.cliente.trim() !== '' ? s.cliente.trim() : 'Sin nombre';
+      const op = s.operador && s.operador.trim() !== '' ? s.operador.trim() : 'Sin operador';
+
+      let cat = '';
+      let sub = '';
+      let key = '';
+      let itemMaq: string | undefined = undefined;
+      let itemImp: string | undefined = undefined;
+      let itemCta: string | undefined = undefined;
+      let itemCli: string | undefined = undefined;
+      let itemOp: string | undefined = undefined;
 
       if (tipoReporte === 'maquinaria') {
-        // REGLA: Tratar Maquinaria e Implemento como campos separados
         cat = maquina;
         sub = imp;
-        key = `${cat}__${sub}`;
+        itemMaq = maquina;
+        itemImp = imp;
+        key = `${maquina}__${imp}`;
       } else if (tipoReporte === 'maquinaria_cliente') {
+        // Cuatro campos independientes: Maquinaria, Implemento, Cuenta, Cliente
         cat = maquina;
-        sub = `${imp !== '—' ? imp + ' — ' : ''}Cuenta #${s.cuenta} - ${s.cliente}`;
-        key = `${cat}__${sub}`;
+        sub = imp;
+        itemMaq = maquina;
+        itemImp = imp;
+        itemCta = cta;
+        itemCli = cli;
+        key = `${cta}__${cli}__${maquina}__${imp}`;
       } else if (tipoReporte === 'cliente') {
-        cat = `Cuenta #${s.cuenta || 'S/N'}`;
-        sub = s.cliente || 'Sin nombre';
-        key = `${cat}__${sub}`;
+        // Dos campos independientes: Cuenta y Cliente
+        cat = cta;
+        sub = cli;
+        itemCta = cta;
+        itemCli = cli;
+        key = `${cta}__${cli}`;
       } else if (tipoReporte === 'operador') {
-        cat = s.operador && s.operador.trim() !== '' ? s.operador.trim() : 'Sin operador';
+        // Tres campos independientes: Operador, Maquinaria e Implemento
+        cat = op;
         sub = imp !== '—' ? `${maquina} / ${imp}` : maquina;
-        key = `${cat}__${sub}`;
+        itemOp = op;
+        itemMaq = maquina;
+        itemImp = imp;
+        key = `${op}__${maquina}__${imp}`;
       }
 
       if (!acumulador[key]) {
         acumulador[key] = {
           categoria: cat,
           subcategoria: sub,
+          maquinaria: itemMaq,
+          implemento: itemImp,
+          cuenta: itemCta,
+          cliente: itemCli,
+          operador: itemOp,
           servicios: 0,
           horas: 0,
           cantidad: 0,
@@ -331,16 +351,57 @@ export const Reportes: React.FC<ReportesProps> = ({
     }
 
     const itemsCalculados: ReporteItem[] = Object.values(acumulador).map(it => ({
-      categoria: it.categoria,
-      subcategoria: it.subcategoria,
-      servicios: it.servicios,
+      ...it,
       horas: Math.round(it.horas * 100) / 100,
       cantidad: Math.round(it.cantidad * 100) / 100,
       total: Math.round(it.total * 100) / 100,
     }));
 
-    // Ordenar de mayor a menor por Total facturado
-    itemsCalculados.sort((a, b) => b.total - a.total);
+    // ORDENAMIENTO SEGÚN REQUERIMIENTOS:
+    if (tipoReporte === 'maquinaria_cliente') {
+      // 1. Cuenta (de menor a mayor numérico natural: 1, 2, 10, 25, 100, 125, 148, 1000...).
+      // 2. Cliente.
+      // 3. Maquinaria.
+      // 4. Implemento.
+      // Todos los datos de una misma cuenta quedan juntos.
+      itemsCalculados.sort((a, b) => {
+        const diffCta = compararCuentas(a.cuenta, b.cuenta);
+        if (diffCta !== 0) return diffCta;
+
+        const diffCli = (a.cliente || '').localeCompare(b.cliente || '', undefined, { sensitivity: 'base' });
+        if (diffCli !== 0) return diffCli;
+
+        const diffMaq = (a.maquinaria || '').localeCompare(b.maquinaria || '', undefined, { sensitivity: 'base' });
+        if (diffMaq !== 0) return diffMaq;
+
+        return (a.implemento || '').localeCompare(b.implemento || '', undefined, { sensitivity: 'base' });
+      });
+    } else if (tipoReporte === 'cliente') {
+      // 1. Cuenta (de menor a mayor numérico natural).
+      // 2. Cliente.
+      itemsCalculados.sort((a, b) => {
+        const diffCta = compararCuentas(a.cuenta, b.cuenta);
+        if (diffCta !== 0) return diffCta;
+
+        return (a.cliente || '').localeCompare(b.cliente || '', undefined, { sensitivity: 'base' });
+      });
+    } else if (tipoReporte === 'maquinaria') {
+      // Orden por Maquinaria y luego Implemento
+      itemsCalculados.sort((a, b) => {
+        const diffMaq = (a.maquinaria || '').localeCompare(b.maquinaria || '', undefined, { sensitivity: 'base' });
+        if (diffMaq !== 0) return diffMaq;
+        return (a.implemento || '').localeCompare(b.implemento || '', undefined, { sensitivity: 'base' });
+      });
+    } else if (tipoReporte === 'operador') {
+      // Orden por Operador, luego Maquinaria, luego Implemento
+      itemsCalculados.sort((a, b) => {
+        const diffOp = (a.operador || '').localeCompare(b.operador || '', undefined, { sensitivity: 'base' });
+        if (diffOp !== 0) return diffOp;
+        const diffMaq = (a.maquinaria || '').localeCompare(b.maquinaria || '', undefined, { sensitivity: 'base' });
+        if (diffMaq !== 0) return diffMaq;
+        return (a.implemento || '').localeCompare(b.implemento || '', undefined, { sensitivity: 'base' });
+      });
+    }
 
     return {
       items: itemsCalculados,
@@ -494,8 +555,8 @@ export const Reportes: React.FC<ReportesProps> = ({
         aoa.push(['Maquinaria', 'Implemento', 'Servicios', 'Horas', 'Cantidad', 'Total ($us)']);
         items.forEach(item => {
           aoa.push([
-            item.categoria,
-            item.subcategoria || '—',
+            item.maquinaria,
+            item.implemento || '—',
             item.servicios,
             item.horas,
             item.cantidad,
@@ -507,8 +568,8 @@ export const Reportes: React.FC<ReportesProps> = ({
         aoa.push(['Cuenta', 'Cliente', 'Servicios', 'Horas', 'Cantidad', 'Total ($us)']);
         items.forEach(item => {
           aoa.push([
-            item.subcategoria || 'S/N',
-            item.categoria,
+            item.cuenta || 'S/N',
+            item.cliente || 'Sin nombre',
             item.servicios,
             item.horas,
             item.cantidad,
@@ -517,36 +578,81 @@ export const Reportes: React.FC<ReportesProps> = ({
         });
         aoa.push(['TOTAL GENERAL', '', totalServicios, totalHoras, totalCantidad, totalGeneral]);
       } else if (tipoReporte === 'maquinaria_cliente') {
-        aoa.push(['Maquinaria', 'Implemento y Cliente', 'Servicios', 'Horas', 'Cantidad', 'Total ($us)']);
+        // Columnas independientes según especificación:
+        // A = Maquinaria | B = Implemento | C = Cuenta | D = Cliente | E = Servicios | F = Cantidad | G = Horas | H = Total
+        aoa.push(['Maquinaria', 'Implemento', 'Cuenta', 'Cliente', 'Servicios', 'Cantidad', 'Horas', 'Total ($us)']);
         items.forEach(item => {
           aoa.push([
-            item.categoria,
-            item.subcategoria || '—',
+            item.maquinaria,
+            item.implemento || '—',
+            item.cuenta || 'S/N',
+            item.cliente || 'Sin nombre',
             item.servicios,
-            item.horas,
             item.cantidad,
+            item.horas,
             item.total
           ]);
         });
-        aoa.push(['TOTAL GENERAL', '', totalServicios, totalHoras, totalCantidad, totalGeneral]);
+        aoa.push(['TOTAL GENERAL', '', '', '', totalServicios, totalCantidad, totalHoras, totalGeneral]);
       } else if (tipoReporte === 'operador') {
-        aoa.push(['Operador', 'Servicios', 'Horas', 'Cantidad', 'Total ($us)']);
+        aoa.push(['Operador', 'Maquinaria', 'Implemento', 'Servicios', 'Horas', 'Cantidad', 'Total ($us)']);
         items.forEach(item => {
           aoa.push([
-            item.categoria,
+            item.operador,
+            item.maquinaria,
+            item.implemento || '—',
             item.servicios,
             item.horas,
             item.cantidad,
             item.total
           ]);
         });
-        aoa.push(['TOTAL GENERAL', totalServicios, totalHoras, totalCantidad, totalGeneral]);
+        aoa.push(['TOTAL GENERAL', '', '', totalServicios, totalHoras, totalCantidad, totalGeneral]);
       }
 
       const ws = XLSX.utils.aoa_to_sheet(aoa);
-      ws['!cols'] = [
-        { wch: 22 }, { wch: 22 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 18 }, { wch: 18 }, { wch: 18 }
-      ];
+
+      // Anchos de columnas ajustados por cada tipo de reporte
+      if (tipoReporte === 'maquinaria_cliente') {
+        ws['!cols'] = [
+          { wch: 22 }, // Maquinaria
+          { wch: 20 }, // Implemento
+          { wch: 12 }, // Cuenta
+          { wch: 28 }, // Cliente
+          { wch: 12 }, // Servicios
+          { wch: 14 }, // Cantidad
+          { wch: 14 }, // Horas
+          { wch: 16 }  // Total ($us)
+        ];
+      } else if (tipoReporte === 'cliente') {
+        ws['!cols'] = [
+          { wch: 14 }, // Cuenta
+          { wch: 28 }, // Cliente
+          { wch: 12 }, // Servicios
+          { wch: 14 }, // Horas
+          { wch: 14 }, // Cantidad
+          { wch: 16 }  // Total ($us)
+        ];
+      } else if (tipoReporte === 'operador') {
+        ws['!cols'] = [
+          { wch: 24 }, // Operador
+          { wch: 22 }, // Maquinaria
+          { wch: 20 }, // Implemento
+          { wch: 12 }, // Servicios
+          { wch: 14 }, // Horas
+          { wch: 14 }, // Cantidad
+          { wch: 16 }  // Total ($us)
+        ];
+      } else {
+        ws['!cols'] = [
+          { wch: 22 }, // Maquinaria
+          { wch: 20 }, // Implemento
+          { wch: 12 }, // Servicios
+          { wch: 14 }, // Horas
+          { wch: 14 }, // Cantidad
+          { wch: 16 }  // Total ($us)
+        ];
+      }
       XLSX.utils.book_append_sheet(wb, ws, nombreHoja.slice(0, 31));
       const filename = `Reporte_${tipoReporte}_${periodoTexto.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`;
       XLSX.writeFile(wb, filename);
@@ -569,7 +675,7 @@ export const Reportes: React.FC<ReportesProps> = ({
               <h2 className="text-base sm:text-lg font-extrabold text-slate-900">
                 Generador de Reportes
               </h2>
-              <p className="text-xs text-slate-500">Resumen consolidado y reportes detallados con total real de Google Sheets</p>
+              <p className="text-xs text-slate-500">Resumen consolidado y reportes detallados oficiales del sistema</p>
             </div>
           </div>
 
@@ -580,7 +686,7 @@ export const Reportes: React.FC<ReportesProps> = ({
                 onClick={onRefrescarServicios}
                 disabled={isLoadingServicios}
                 className="h-11 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                title="Actualizar datos completos desde Google Sheets"
+                title="Actualizar datos completos"
               >
                 <RotateCcw className={`w-4 h-4 ${isLoadingServicios ? 'animate-spin' : ''}`} />
                 <span>{isLoadingServicios ? 'Cargando...' : 'Actualizar'}</span>
@@ -1098,81 +1204,164 @@ export const Reportes: React.FC<ReportesProps> = ({
       </div>
     ) : (
           /* ========================================================================= */
-          /* VISTA 2: TABLAS CONSOLIDADAS (MAQUINARIA E IMPLEMENTO, CLIENTE, OPERADOR)   */
+          /* VISTA 2: TABLAS CONSOLIDADAS (MAQUINARIA E IMPLEMENTO, CLIENTE, ETC.)    */
           /* ========================================================================= */
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs divide-y divide-slate-200 print-table">
               <thead className="bg-[#0a2342] text-white">
                 <tr>
-                  <th className="px-4 py-3 font-bold uppercase tracking-wider">
-                    {tipoReporte === 'maquinaria' && 'Maquinaria'}
-                    {tipoReporte === 'maquinaria_cliente' && 'Maquinaria'}
-                    {tipoReporte === 'cliente' && 'Cuenta'}
-                    {tipoReporte === 'operador' && 'Operador'}
-                  </th>
-                  {tipoReporte === 'maquinaria' && (
-                    <th className="px-4 py-3 font-bold uppercase tracking-wider">
-                      Implemento
-                    </th>
+                  {tipoReporte === 'maquinaria_cliente' ? (
+                    <>
+                      <th className="px-3 py-3 font-bold uppercase tracking-wider">Maquinaria</th>
+                      <th className="px-3 py-3 font-bold uppercase tracking-wider">Implemento</th>
+                      <th className="px-3 py-3 font-bold uppercase tracking-wider">Cuenta</th>
+                      <th className="px-3 py-3 font-bold uppercase tracking-wider">Cliente</th>
+                      <th className="px-3 py-3 font-bold uppercase tracking-wider text-center">Servicios</th>
+                      <th className="px-3 py-3 font-bold uppercase tracking-wider text-right">Cantidad</th>
+                      <th className="px-3 py-3 font-bold uppercase tracking-wider text-right">Horas</th>
+                      <th className="px-3 py-3 font-bold uppercase tracking-wider text-right">Total</th>
+                    </>
+                  ) : tipoReporte === 'cliente' ? (
+                    <>
+                      <th className="px-4 py-3 font-bold uppercase tracking-wider">Cuenta</th>
+                      <th className="px-4 py-3 font-bold uppercase tracking-wider">Cliente</th>
+                      <th className="px-4 py-3 font-bold uppercase tracking-wider text-center">Servicios</th>
+                      <th className="px-4 py-3 font-bold uppercase tracking-wider text-right">Horas</th>
+                      <th className="px-4 py-3 font-bold uppercase tracking-wider text-right">Cantidad</th>
+                      <th className="px-4 py-3 font-bold uppercase tracking-wider text-right">Total</th>
+                    </>
+                  ) : tipoReporte === 'operador' ? (
+                    <>
+                      <th className="px-3 py-3 font-bold uppercase tracking-wider">Operador</th>
+                      <th className="px-3 py-3 font-bold uppercase tracking-wider">Maquinaria</th>
+                      <th className="px-3 py-3 font-bold uppercase tracking-wider">Implemento</th>
+                      <th className="px-3 py-3 font-bold uppercase tracking-wider text-center">Servicios</th>
+                      <th className="px-3 py-3 font-bold uppercase tracking-wider text-right">Horas</th>
+                      <th className="px-3 py-3 font-bold uppercase tracking-wider text-right">Cantidad</th>
+                      <th className="px-3 py-3 font-bold uppercase tracking-wider text-right">Total</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="px-4 py-3 font-bold uppercase tracking-wider">Maquinaria</th>
+                      <th className="px-4 py-3 font-bold uppercase tracking-wider">Implemento</th>
+                      <th className="px-4 py-3 font-bold uppercase tracking-wider text-center">Servicios</th>
+                      <th className="px-4 py-3 font-bold uppercase tracking-wider text-right">Horas</th>
+                      <th className="px-4 py-3 font-bold uppercase tracking-wider text-right">Cantidad</th>
+                      <th className="px-4 py-3 font-bold uppercase tracking-wider text-right">Total</th>
+                    </>
                   )}
-                  {tipoReporte === 'maquinaria_cliente' && (
-                    <th className="px-4 py-3 font-bold uppercase tracking-wider">
-                      Implemento / Cliente
-                    </th>
-                  )}
-                  {tipoReporte === 'cliente' && (
-                    <th className="px-4 py-3 font-bold uppercase tracking-wider">
-                      Cliente
-                    </th>
-                  )}
-                  {tipoReporte === 'operador' && (
-                    <th className="px-4 py-3 font-bold uppercase tracking-wider">
-                      Maquinaria e Implemento
-                    </th>
-                  )}
-                  <th className="px-4 py-3 font-bold uppercase tracking-wider text-center">
-                    Servicios
-                  </th>
-                  <th className="px-4 py-3 font-bold uppercase tracking-wider text-right">
-                    Horas
-                  </th>
-                  <th className="px-4 py-3 font-bold uppercase tracking-wider text-right">
-                    Cantidad
-                  </th>
-                  <th className="px-4 py-3 font-bold uppercase tracking-wider text-right">
-                    Total
-                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-800">
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-slate-400">
+                    <td 
+                      colSpan={
+                        tipoReporte === 'maquinaria_cliente' ? 8 :
+                        tipoReporte === 'operador' ? 7 : 6
+                      } 
+                      className="p-8 text-center text-slate-400"
+                    >
                       No se registran servicios para el período seleccionado ({periodoTexto}).
                     </td>
                   </tr>
                 ) : (
                   items.map((item, idx) => (
                     <tr key={idx} className="hover:bg-blue-50/50">
-                      <td className="px-4 py-3 font-bold text-slate-900">
-                        {item.categoria}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {item.subcategoria || '—'}
-                      </td>
-                      <td className="px-4 py-3 font-mono font-bold text-center text-slate-700">
-                        {item.servicios}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-right font-semibold text-slate-700">
-                        {formatNumber(item.horas, 2)}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-right text-slate-600">
-                        {formatNumber(item.cantidad, 2)}
-                      </td>
-                      {/* Total obtenido DIRECTAMENTE de la suma de s.total */}
-                      <td className="px-4 py-3 font-mono font-black text-right text-emerald-600">
-                        {formatCurrency(item.total)}
-                      </td>
+                      {tipoReporte === 'maquinaria_cliente' ? (
+                        <>
+                          <td className="px-3 py-2.5 font-bold text-slate-900 whitespace-nowrap">
+                            {item.maquinaria}
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">
+                            {item.implemento || '—'}
+                          </td>
+                          <td className="px-3 py-2.5 font-mono font-bold text-blue-900 whitespace-nowrap">
+                            {item.cuenta || 'S/N'}
+                          </td>
+                          <td className="px-3 py-2.5 font-semibold text-slate-900 whitespace-nowrap">
+                            {item.cliente}
+                          </td>
+                          <td className="px-3 py-2.5 font-mono font-bold text-center text-slate-700">
+                            {item.servicios}
+                          </td>
+                          <td className="px-3 py-2.5 font-mono text-right text-slate-600">
+                            {formatNumber(item.cantidad, 2)}
+                          </td>
+                          <td className="px-3 py-2.5 font-mono text-right font-semibold text-slate-700">
+                            {formatNumber(item.horas, 2)}
+                          </td>
+                          <td className="px-3 py-2.5 font-mono font-black text-right text-emerald-600 whitespace-nowrap">
+                            {formatCurrency(item.total)}
+                          </td>
+                        </>
+                      ) : tipoReporte === 'cliente' ? (
+                        <>
+                          <td className="px-4 py-2.5 font-mono font-bold text-blue-900 whitespace-nowrap">
+                            {item.cuenta || 'S/N'}
+                          </td>
+                          <td className="px-4 py-2.5 font-semibold text-slate-900 whitespace-nowrap">
+                            {item.cliente}
+                          </td>
+                          <td className="px-4 py-2.5 font-mono font-bold text-center text-slate-700">
+                            {item.servicios}
+                          </td>
+                          <td className="px-4 py-2.5 font-mono text-right font-semibold text-slate-700">
+                            {formatNumber(item.horas, 2)}
+                          </td>
+                          <td className="px-4 py-2.5 font-mono text-right text-slate-600">
+                            {formatNumber(item.cantidad, 2)}
+                          </td>
+                          <td className="px-4 py-2.5 font-mono font-black text-right text-emerald-600 whitespace-nowrap">
+                            {formatCurrency(item.total)}
+                          </td>
+                        </>
+                      ) : tipoReporte === 'operador' ? (
+                        <>
+                          <td className="px-3 py-2.5 font-bold text-slate-900 whitespace-nowrap">
+                            {item.operador}
+                          </td>
+                          <td className="px-3 py-2.5 font-semibold text-slate-800 whitespace-nowrap">
+                            {item.maquinaria}
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">
+                            {item.implemento || '—'}
+                          </td>
+                          <td className="px-3 py-2.5 font-mono font-bold text-center text-slate-700">
+                            {item.servicios}
+                          </td>
+                          <td className="px-3 py-2.5 font-mono text-right font-semibold text-slate-700">
+                            {formatNumber(item.horas, 2)}
+                          </td>
+                          <td className="px-3 py-2.5 font-mono text-right text-slate-600">
+                            {formatNumber(item.cantidad, 2)}
+                          </td>
+                          <td className="px-3 py-2.5 font-mono font-black text-right text-emerald-600 whitespace-nowrap">
+                            {formatCurrency(item.total)}
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-4 py-2.5 font-bold text-slate-900 whitespace-nowrap">
+                            {item.maquinaria}
+                          </td>
+                          <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">
+                            {item.implemento || '—'}
+                          </td>
+                          <td className="px-4 py-2.5 font-mono font-bold text-center text-slate-700">
+                            {item.servicios}
+                          </td>
+                          <td className="px-4 py-2.5 font-mono text-right font-semibold text-slate-700">
+                            {formatNumber(item.horas, 2)}
+                          </td>
+                          <td className="px-4 py-2.5 font-mono text-right text-slate-600">
+                            {formatNumber(item.cantidad, 2)}
+                          </td>
+                          <td className="px-4 py-2.5 font-mono font-black text-right text-emerald-600 whitespace-nowrap">
+                            {formatCurrency(item.total)}
+                          </td>
+                        </>
+                      )}
                     </tr>
                   ))
                 )}
@@ -1180,24 +1369,70 @@ export const Reportes: React.FC<ReportesProps> = ({
               {items.length > 0 && (
                 <tfoot className="bg-slate-100/90 font-black border-t-2 border-slate-300">
                   <tr>
-                    <td 
-                      colSpan={2} 
-                      className="px-4 py-3.5 text-slate-900 uppercase font-extrabold tracking-wider"
-                    >
-                      TOTAL GENERAL CONSOLIDADO
-                    </td>
-                    <td className="px-4 py-3.5 text-center font-mono font-extrabold text-blue-900">
-                      {totalServicios}
-                    </td>
-                    <td className="px-4 py-3.5 text-right font-mono font-extrabold text-blue-900">
-                      {formatNumber(totalHoras, 2)}
-                    </td>
-                    <td className="px-4 py-3.5 text-right font-mono font-extrabold text-slate-800">
-                      {formatNumber(totalCantidad, 2)}
-                    </td>
-                    <td className="px-4 py-3.5 text-right font-mono font-black text-emerald-700 text-sm">
-                      {formatCurrency(totalGeneral)}
-                    </td>
+                    {tipoReporte === 'maquinaria_cliente' ? (
+                      <>
+                        <td 
+                          colSpan={4} 
+                          className="px-3 py-3.5 text-slate-900 uppercase font-extrabold tracking-wider"
+                        >
+                          TOTAL GENERAL CONSOLIDADO
+                        </td>
+                        <td className="px-3 py-3.5 text-center font-mono font-extrabold text-blue-900">
+                          {totalServicios}
+                        </td>
+                        <td className="px-3 py-3.5 text-right font-mono font-extrabold text-slate-800">
+                          {formatNumber(totalCantidad, 2)}
+                        </td>
+                        <td className="px-3 py-3.5 text-right font-mono font-extrabold text-blue-900">
+                          {formatNumber(totalHoras, 2)}
+                        </td>
+                        <td className="px-3 py-3.5 text-right font-mono font-black text-emerald-700 text-sm whitespace-nowrap">
+                          {formatCurrency(totalGeneral)}
+                        </td>
+                      </>
+                    ) : tipoReporte === 'operador' ? (
+                      <>
+                        <td 
+                          colSpan={3} 
+                          className="px-3 py-3.5 text-slate-900 uppercase font-extrabold tracking-wider"
+                        >
+                          TOTAL GENERAL CONSOLIDADO
+                        </td>
+                        <td className="px-3 py-3.5 text-center font-mono font-extrabold text-blue-900">
+                          {totalServicios}
+                        </td>
+                        <td className="px-3 py-3.5 text-right font-mono font-extrabold text-blue-900">
+                          {formatNumber(totalHoras, 2)}
+                        </td>
+                        <td className="px-3 py-3.5 text-right font-mono font-extrabold text-slate-800">
+                          {formatNumber(totalCantidad, 2)}
+                        </td>
+                        <td className="px-3 py-3.5 text-right font-mono font-black text-emerald-700 text-sm whitespace-nowrap">
+                          {formatCurrency(totalGeneral)}
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td 
+                          colSpan={2} 
+                          className="px-4 py-3.5 text-slate-900 uppercase font-extrabold tracking-wider"
+                        >
+                          TOTAL GENERAL CONSOLIDADO
+                        </td>
+                        <td className="px-4 py-3.5 text-center font-mono font-extrabold text-blue-900">
+                          {totalServicios}
+                        </td>
+                        <td className="px-4 py-3.5 text-right font-mono font-extrabold text-blue-900">
+                          {formatNumber(totalHoras, 2)}
+                        </td>
+                        <td className="px-4 py-3.5 text-right font-mono font-extrabold text-slate-800">
+                          {formatNumber(totalCantidad, 2)}
+                        </td>
+                        <td className="px-4 py-3.5 text-right font-mono font-black text-emerald-700 text-sm whitespace-nowrap">
+                          {formatCurrency(totalGeneral)}
+                        </td>
+                      </>
+                    )}
                   </tr>
                 </tfoot>
               )}
@@ -1211,7 +1446,7 @@ export const Reportes: React.FC<ReportesProps> = ({
             <strong>CONTROL DE MAQUINARIA</strong> — Sistema de Gestión Oficial
           </div>
           <div>
-            Totales calculados directamente desde la columna Total de Google Sheets
+            Totales calculados directamente desde los registros del sistema
           </div>
         </div>
       </div>
