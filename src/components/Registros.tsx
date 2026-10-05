@@ -563,7 +563,11 @@ export const Registros: React.FC<RegistrosProps> = ({
                         </span>
                         {s.unidad === 'Hora' && s.tipo && (
                           <div className="text-[10px] text-slate-400">
-                            {s.tipo} ({s.inicio} - {s.fin})
+                            {s.tipo === 'Horómetro' ? (
+                              s.inicio && s.fin ? `Horómetro: ${s.inicio} → ${s.fin}` : 'Horómetro'
+                            ) : (
+                              s.inicio && s.fin ? `Horario: ${s.inicio} - ${s.fin}` : s.tipo
+                            )}
                           </div>
                         )}
                       </td>

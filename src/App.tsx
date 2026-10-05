@@ -39,6 +39,7 @@ import { Reportes } from './components/Reportes';
 import { Configuracion } from './components/Configuracion';
 import { ComprobanteModal } from './components/ComprobanteModal';
 import { PWAInstallButton } from './components/PWAInstallButton';
+import { MotoniveladoraIcon } from './components/MotoniveladoraIcon';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
@@ -284,7 +285,7 @@ export default function App() {
 
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white md:hidden">
-                <Tractor className="w-5 h-5" />
+                <MotoniveladoraIcon className="w-5 h-5 text-white" />
               </div>
               <div>
                 <h1 className="font-extrabold text-sm sm:text-base tracking-wide uppercase leading-tight text-white">

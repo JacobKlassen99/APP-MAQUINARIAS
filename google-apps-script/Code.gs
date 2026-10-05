@@ -368,7 +368,29 @@ function obtenerServicios(filtros) {
       return 0;
     };
 
+    // Normalización de inicio y fin (NUNCA convertir a Date ni GMT)
+    let strInicio = '';
+    let strFin = '';
+    if (fila[8] instanceof Date) {
+      strInicio = '';
+    } else if (fila[8] !== undefined && fila[8] !== null) {
+      strInicio = String(fila[8]).trim();
+      if (strInicio.indexOf('GMT') !== -1 || strInicio.indexOf('hora de') !== -1) {
+        strInicio = '';
+      }
+    }
+    if (fila[9] instanceof Date) {
+      strFin = '';
+    } else if (fila[9] !== undefined && fila[9] !== null) {
+      strFin = String(fila[9]).trim();
+      if (strFin.indexOf('GMT') !== -1 || strFin.indexOf('hora de') !== -1) {
+        strFin = '';
+      }
+    }
+
     const servicio = {
+      id: nroServicio,
+      numero: nroServicio,
       nroServicio: nroServicio,
       fecha: fechaStr,
       cuenta: String(fila[2] !== undefined && fila[2] !== null ? fila[2] : '').trim(),
@@ -377,13 +399,14 @@ function obtenerServicios(filtros) {
       implemento: String(fila[5] || '').trim(),
       operador: String(fila[6] || '').trim(),
       tipo: String(fila[7] || '').trim(),
-      inicio: String(fila[8] !== undefined && fila[8] !== null ? fila[8] : '').trim(),
-      fin: String(fila[9] !== undefined && fila[9] !== null ? fila[9] : '').trim(),
+      inicio: strInicio,
+      fin: strFin,
       cantidad: parseNum(fila[10]),
       unidad: String(fila[11] || 'Hora').trim(),
       horas: parseNum(fila[12]),
       precio: parseNum(fila[13]),
       total: parseNum(fila[14]),
+      fila: i + 2,
       filaIndex: i + 2
     };
 
@@ -704,29 +727,48 @@ function guardarServicio(datos) {
  */
 function editarServicio(datos) {
   try {
+    if (!datos) {
+      return { exito: false, ok: false, mensaje: 'No se indicó el servicio a editar.' };
+    }
+
     const hoja = obtenerHoja(HOJAS.SERVICIOS);
-    if (!hoja) return { exito: false, mensaje: 'Hoja servicios no encontrada.' };
+    if (!hoja) return { exito: false, ok: false, mensaje: 'Hoja servicios no encontrada.' };
 
     const ultimaFila = hoja.getLastRow();
-    if (ultimaFila <= 1) return { exito: false, mensaje: 'No hay registros para editar.' };
+    if (ultimaFila <= 1) return { exito: false, ok: false, mensaje: 'No hay registros para editar.' };
 
-    const codigos = hoja.getRange(2, 1, ultimaFila - 1, 1).getValues();
+    const filaIndicada = parseInt(datos.fila !== undefined ? datos.fila : datos.filaIndex, 10);
+    let nroBuscar = String(datos.numero || datos.nroServicio || datos.id || '').trim();
+
+    if (!filaIndicada && !nroBuscar) {
+      return { exito: false, ok: false, mensaje: 'No se indicó el servicio a editar.' };
+    }
+
     let filaDestino = -1;
-    const nroBuscar = datos.numero || datos.nroServicio;
 
-    if (datos.fila && Number(datos.fila) >= 2) {
-      filaDestino = Number(datos.fila);
-    } else {
+    // 1. Si viene la fila real de Google Sheets, verificarla
+    if (filaIndicada && filaIndicada >= 2 && filaIndicada <= ultimaFila) {
+      const codigoEnFila = String(hoja.getRange(filaIndicada, 1).getValue()).trim();
+      if (!nroBuscar || codigoEnFila.toUpperCase() === nroBuscar.toUpperCase()) {
+        filaDestino = filaIndicada;
+        if (!nroBuscar) nroBuscar = codigoEnFila;
+      }
+    }
+
+    // 2. Si no coincidió la fila o no vino, buscar por número de servicio
+    if (filaDestino === -1 && nroBuscar) {
+      const codigos = hoja.getRange(2, 1, ultimaFila - 1, 1).getValues();
       for (let i = 0; i < codigos.length; i++) {
-        if (String(codigos[i][0]).trim() === nroBuscar) {
+        if (String(codigos[i][0]).trim().toUpperCase() === nroBuscar.toUpperCase()) {
           filaDestino = i + 2;
+          nroBuscar = String(codigos[i][0]).trim();
           break;
         }
       }
     }
 
     if (filaDestino === -1) {
-      return { exito: false, mensaje: 'Servicio no encontrado: ' + nroBuscar };
+      return { exito: false, ok: false, mensaje: 'Servicio no encontrado en Google Sheets: ' + (nroBuscar || ('Fila ' + filaIndicada)) };
     }
 
     const tarifaOficial = obtenerPrecioMaquinaria(datos.maquinaria, datos.implemento);
@@ -737,7 +779,13 @@ function editarServicio(datos) {
     datos.precio = precio;
     const calculo = calcularServicio(datos);
 
-    const fila = [
+    // Limpieza de inicio y fin para evitar fechas y GMT
+    let inicioVal = datos.inicio !== undefined && datos.inicio !== null ? String(datos.inicio).trim() : '';
+    let finVal = datos.fin !== undefined && datos.fin !== null ? String(datos.fin).trim() : '';
+    if (inicioVal.indexOf('GMT') !== -1 || inicioVal.indexOf('hora de') !== -1) inicioVal = '';
+    if (finVal.indexOf('GMT') !== -1 || finVal.indexOf('hora de') !== -1) finVal = '';
+
+    const filaActualizada = [
       nroBuscar,
       datos.fecha,
       datos.cuenta,
@@ -746,8 +794,8 @@ function editarServicio(datos) {
       datos.implemento || '',
       datos.operador,
       datos.tipo || '',
-      datos.inicio !== undefined && datos.inicio !== null ? datos.inicio : '',
-      datos.fin !== undefined && datos.fin !== null ? datos.fin : '',
+      inicioVal,
+      finVal,
       calculo.cantidad,
       unidad,
       calculo.horas,
@@ -755,10 +803,17 @@ function editarServicio(datos) {
       calculo.total
     ];
 
-    hoja.getRange(filaDestino, 1, 1, 15).setValues([fila]);
+    hoja.getRange(filaDestino, 1, 1, 15).setValues([filaActualizada]);
     SpreadsheetApp.flush();
 
-    return { exito: true, ok: true, mensaje: 'Servicio actualizado correctamente en Google Sheets.' };
+    return { 
+      exito: true, 
+      ok: true, 
+      mensaje: 'Servicio actualizado correctamente.',
+      numero: nroBuscar,
+      nroServicio: nroBuscar,
+      fila: filaDestino
+    };
   } catch (err) {
     return { exito: false, ok: false, mensaje: 'Error al actualizar servicio: ' + err.message };
   }

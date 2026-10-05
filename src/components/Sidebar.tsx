@@ -5,9 +5,9 @@ import {
   ClipboardList, 
   BarChart3, 
   Settings, 
-  Tractor,
   X
 } from 'lucide-react';
+import { MotoniveladoraIcon } from './MotoniveladoraIcon';
 import { PWAInstallButton } from './PWAInstallButton';
 
 export type TabType = 'dashboard' | 'nuevo' | 'registros' | 'reportes' | 'config';
@@ -76,7 +76,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="p-5 border-b border-blue-900/40 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
-              <Tractor className="w-6 h-6" />
+              <MotoniveladoraIcon className="w-6 h-6 text-white" />
             </div>
             <div>
               <h1 className="font-extrabold text-sm tracking-wide text-white uppercase leading-tight">

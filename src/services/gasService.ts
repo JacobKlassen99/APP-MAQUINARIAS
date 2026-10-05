@@ -220,8 +220,26 @@ function normalizarServicios(raw: any[]): Servicio[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((item) => {
     const nro = String(item.numero || item.nroServicio || '').trim();
+    
+    // NUNCA permitir cadenas de fecha/GMT en horómetro o inicio/fin
+    let rawInicio = String(item.inicio ?? '').trim();
+    let rawFin = String(item.fin ?? '').trim();
+    if (rawInicio.includes('GMT') || rawInicio.includes('hora de') || /^[A-Z][a-z]{2}\s[A-Z][a-z]{2}\s\d+/.test(rawInicio)) {
+      rawInicio = '';
+    }
+    if (rawFin.includes('GMT') || rawFin.includes('hora de') || /^[A-Z][a-z]{2}\s[A-Z][a-z]{2}\s\d+/.test(rawFin)) {
+      rawFin = '';
+    }
+
+    const filaNum = typeof item.fila === 'number' 
+      ? item.fila 
+      : (typeof item.filaIndex === 'number' 
+        ? item.filaIndex 
+        : (parseInt(item.fila || item.filaIndex, 10) || undefined));
+
     return {
       nroServicio: nro,
+      numero: nro,
       fecha: String(item.fecha || '').trim(),
       cuenta: String(item.cuenta || '').trim(),
       cliente: String(item.cliente || '').trim(),
@@ -229,15 +247,15 @@ function normalizarServicios(raw: any[]): Servicio[] {
       implemento: String(item.implemento || '').trim(),
       operador: String(item.operador || '').trim(),
       tipo: (item.tipo as any) || '',
-      inicio: String(item.inicio ?? '').trim(),
-      fin: String(item.fin ?? '').trim(),
+      inicio: rawInicio,
+      fin: rawFin,
       cantidad: Number(item.cantidad) || 0,
       unidad: (item.unidad as any) || 'Hora',
       horas: Number(item.horas) || 0,
       precio: Number(item.precio) || 0,
       total: Number(item.total) || 0,
       id: nro,
-      fila: typeof item.fila === 'number' ? item.fila : undefined,
+      fila: filaNum,
     };
   });
 }
@@ -587,10 +605,24 @@ export const gasService = {
     mensaje: string;
     numero?: string;
     nroServicio?: string;
+    fila?: number;
   }> {
+    const filaNum = typeof datos.fila === 'number' 
+      ? datos.fila 
+      : (typeof datos.filaIndex === 'number' 
+        ? datos.filaIndex 
+        : (parseInt(datos.fila || datos.filaIndex, 10) || undefined));
+    const nro = datos.numero || datos.nroServicio;
+
+    let iniStr = String(datos.inicio ?? '').trim();
+    let finStr = String(datos.fin ?? '').trim();
+    if (iniStr.includes('GMT') || iniStr.includes('hora de')) iniStr = '';
+    if (finStr.includes('GMT') || finStr.includes('hora de')) finStr = '';
+
     const datosLimpios = {
-      fila: typeof datos.fila === 'number' ? datos.fila : undefined,
-      numero: datos.numero || datos.nroServicio,
+      fila: filaNum,
+      numero: nro,
+      nroServicio: nro,
       fecha: datos.fecha,
       cuenta: String(datos.cuenta || ''),
       cliente: datos.cliente,
@@ -598,8 +630,8 @@ export const gasService = {
       implemento: datos.implemento || '',
       operador: datos.operador,
       tipo: datos.tipo || '',
-      inicio: String(datos.inicio ?? ''),
-      fin: String(datos.fin ?? ''),
+      inicio: iniStr,
+      fin: finStr,
       cantidad: Number(datos.cantidad) || 0,
       unidad: datos.unidad || 'Hora',
       horas: Number(datos.horas) || 0,
@@ -612,25 +644,31 @@ export const gasService = {
       return {
         exito: !!(res?.exito || res?.ok),
         ok: !!(res?.exito || res?.ok),
-        mensaje: res?.mensaje || 'Servicio actualizado correctamente en Google Sheets.',
-        numero: res?.numero || datosLimpios.numero,
-        nroServicio: res?.numero || datosLimpios.numero,
+        mensaje: res?.mensaje || 'Servicio actualizado correctamente.',
+        numero: res?.numero || nro,
+        nroServicio: res?.nroServicio || res?.numero || nro,
+        fila: res?.fila || filaNum,
       };
     }
 
     const extraProps: any = {};
-    if (typeof datos.fila === 'number') {
-      extraProps.fila = datos.fila;
+    if (typeof filaNum === 'number') {
+      extraProps.fila = filaNum;
+    }
+    if (nro) {
+      extraProps.numero = nro;
+      extraProps.nroServicio = nro;
     }
 
     const res = await callGasPost<any>('editarServicio', datosLimpios, extraProps);
-    const num = res?.numero || datosLimpios.numero;
+    const num = res?.numero || res?.nroServicio || nro;
     return {
-      exito: true,
-      ok: true,
-      mensaje: res?.mensaje || 'Servicio actualizado correctamente en Google Sheets.',
+      exito: !!(res?.exito || res?.ok),
+      ok: !!(res?.exito || res?.ok),
+      mensaje: res?.mensaje || 'Servicio actualizado correctamente.',
       numero: num,
       nroServicio: num,
+      fila: res?.fila || filaNum,
     };
   },
 

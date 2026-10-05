@@ -226,23 +226,33 @@ export const Reportes: React.FC<ReportesProps> = ({
       impEntry.cantidad += valorCant;
     }
 
-    const resumenJerarquico = Array.from(maquinasMap.values()).map(m => ({
-      maquinaria: m.maquinaria,
-      implementos: Array.from(m.implementosMap.values()).map(imp => ({
+    const resumenJerarquico = Array.from(maquinasMap.values()).map(m => {
+      const imps = Array.from(m.implementosMap.values()).map(imp => ({
         ...imp,
         total: Math.round(imp.total * 100) / 100,
         horas: Math.round(imp.horas * 100) / 100,
         cantidad: Math.round(imp.cantidad * 100) / 100,
-      })),
-      totalMaquinaria: Math.round(m.totalMaquinaria * 100) / 100,
-      totalServicios: m.totalServicios,
-      totalHoras: Math.round(m.totalHoras * 100) / 100,
-      totalCantidad: Math.round(m.totalCantidad * 100) / 100,
-    }));
+      }));
+
+      // Total de cada maquinaria: suma exacta de todos sus implementos
+      const sumImpsTotal = imps.reduce((acc, imp) => acc + imp.total, 0);
+
+      return {
+        maquinaria: m.maquinaria,
+        implementos: imps,
+        totalMaquinaria: Math.round(sumImpsTotal * 100) / 100,
+        totalServicios: m.totalServicios,
+        totalHoras: Math.round(m.totalHoras * 100) / 100,
+        totalCantidad: Math.round(m.totalCantidad * 100) / 100,
+      };
+    });
+
+    // Total general del cliente: suma exacta de las maquinarias (y por tanto de todos sus implementos)
+    const sumMaqsTotal = resumenJerarquico.reduce((acc, m) => acc + m.totalMaquinaria, 0);
 
     return {
       serviciosCliente: ordenados,
-      totalGeneralCliente: Math.round(sumTotal * 100) / 100,
+      totalGeneralCliente: Math.round(sumMaqsTotal * 100) / 100,
       totalHorasCliente: Math.round(sumHoras * 100) / 100,
       totalCantidadCliente: Math.round(sumCant * 100) / 100,
       resumenJerarquico
@@ -716,37 +726,28 @@ export const Reportes: React.FC<ReportesProps> = ({
                     </div>
 
                     {/* Lista jerárquica con subtotales */}
-                    <div className="p-4 sm:p-6 divide-y divide-slate-100 print:divide-slate-200 space-y-5">
+                    <div className="p-5 sm:p-7 divide-y divide-slate-100 print:divide-slate-200 space-y-6">
                       {datosReporteCliente.resumenJerarquico.map((m, mIdx) => (
-                        <div key={mIdx} className={mIdx > 0 ? "pt-5" : ""}>
-                          {/* Nombre de la Maquinaria */}
-                          <div className="flex items-center gap-2 mb-2.5">
-                            <Tractor className="w-4 h-4 text-blue-700 print:hidden shrink-0" />
+                        <div key={mIdx} className={mIdx > 0 ? "pt-6" : ""}>
+                          {/* Nombre de la Maquinaria en mayúsculas */}
+                          <div className="flex items-center gap-2 mb-3">
                             <span className="text-sm font-black text-slate-900 uppercase tracking-wide">
-                              {m.maquinaria}
+                              {m.maquinaria.toUpperCase()}
                             </span>
                           </div>
 
                           {/* Lista de implementos */}
-                          <div className="space-y-1.5 pl-4 sm:pl-6 text-xs sm:text-sm">
+                          <div className="space-y-2 pl-3 sm:pl-5 text-xs sm:text-sm">
                             {m.implementos.map((imp, impIdx) => (
-                              <div key={impIdx} className="flex items-baseline justify-between gap-2 text-slate-700">
-                                <div className="flex items-baseline gap-2 min-w-0">
-                                  <span className="text-slate-400 font-mono">•</span>
-                                  <span className="font-semibold text-slate-800">
-                                    {imp.implemento}
-                                  </span>
-                                  {imp.horas > 0 && (
-                                    <span className="text-[11px] text-slate-400 font-mono hidden sm:inline">
-                                      ({formatNumber(imp.horas, 2)} hrs)
-                                    </span>
-                                  )}
-                                </div>
+                              <div key={impIdx} className="flex items-baseline justify-between gap-2 text-slate-800">
+                                <span className="font-semibold text-slate-800 shrink-0">
+                                  {imp.implemento}
+                                </span>
 
                                 {/* Línea punteada que conecta con el subtotal */}
                                 <div className="flex-1 border-b border-dotted border-slate-300 mx-2 relative top-[-4px] print:border-slate-400" />
 
-                                {/* Subtotal del implemento calculado estrictamente con suma de servicios.Total */}
+                                {/* Subtotal del implemento calculado exclusivamente sumando servicios.Total */}
                                 <span className="font-mono font-bold text-slate-900 whitespace-nowrap">
                                   {formatCurrency(imp.total)}
                                 </span>
@@ -754,12 +755,12 @@ export const Reportes: React.FC<ReportesProps> = ({
                             ))}
 
                             {/* Total de la maquinaria */}
-                            <div className="flex items-baseline justify-between gap-2 pt-2 mt-1 border-t border-slate-200 font-black text-slate-900 print:border-slate-300">
-                              <span className="text-xs uppercase tracking-wider text-slate-900">
-                                TOTAL {m.maquinaria}
+                            <div className="flex items-baseline justify-between gap-2 pt-2.5 mt-1 border-t border-slate-200 font-black text-slate-900 print:border-slate-300">
+                              <span className="text-xs uppercase tracking-wider text-slate-950">
+                                TOTAL {m.maquinaria.toUpperCase()}
                               </span>
                               <div className="flex-1 border-b border-dotted border-slate-400 mx-2 relative top-[-4px]" />
-                              <span className="font-mono text-sm sm:text-base font-black text-blue-900 whitespace-nowrap">
+                              <span className="font-mono text-sm sm:text-base font-black text-blue-950 whitespace-nowrap">
                                 {formatCurrency(m.totalMaquinaria)}
                               </span>
                             </div>
@@ -768,7 +769,7 @@ export const Reportes: React.FC<ReportesProps> = ({
                       ))}
 
                       {/* TOTAL GENERAL */}
-                      <div className="pt-5 mt-4 border-t-2 border-slate-900 bg-slate-50/80 -mx-4 -mb-4 sm:-mx-6 sm:-mb-6 p-4 sm:p-5 print:bg-white print:border-t-2 print:border-black">
+                      <div className="pt-6 mt-4 border-t-2 border-slate-900 bg-slate-50/80 -mx-5 -mb-5 sm:-mx-7 sm:-mb-7 p-4 sm:p-5 print:bg-white print:border-t-2 print:border-black">
                         <div className="flex items-baseline justify-between gap-2">
                           <span className="text-sm sm:text-base font-black uppercase tracking-wider text-slate-950">
                             TOTAL GENERAL

@@ -1,83 +1,164 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
+    <!-- Background Gradient (Deep Navy) -->
     <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#0e325d"/>
-      <stop offset="100%" stop-color="#07172b"/>
+      <stop offset="60%" stop-color="#0a2342"/>
+      <stop offset="100%" stop-color="#051221"/>
     </linearGradient>
-    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+
+    <!-- Machinery Yellow/Gold Gradient -->
+    <linearGradient id="graderYellow" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#fbbf24"/>
       <stop offset="100%" stop-color="#d97706"/>
     </linearGradient>
-    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#3b82f6"/>
-      <stop offset="100%" stop-color="#1d4ed8"/>
+
+    <!-- Metallic Steel Gradient for Blade & Trim -->
+    <linearGradient id="steelGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="50%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+
+    <!-- Tire Rubber Gradient -->
+    <radialGradient id="tireGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="70%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </radialGradient>
+
+    <!-- Cab Glass Gradient -->
+    <linearGradient id="cabGlass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#0284c7" stop-opacity="0.95"/>
     </linearGradient>
   </defs>
 
-  <!-- Base background (for standalone & maskable) -->
-  <rect width="512" height="512" rx="100" fill="url(#bgGrad)"/>
+  <!-- Base background (squircle for app icon) -->
+  <rect width="512" height="512" rx="108" fill="url(#bgGrad)"/>
 
-  <!-- Machinery Cog / Industrial Gear rim in background -->
-  <g fill="none" stroke="#1e3a63" stroke-width="12" stroke-dasharray="24 16">
-    <circle cx="256" cy="256" r="190"/>
-  </g>
+  <!-- Subtle industrial framing circle in background -->
+  <circle cx="256" cy="256" r="195" fill="none" stroke="#1d4ed8" stroke-width="4" stroke-opacity="0.25"/>
+  <circle cx="256" cy="256" r="175" fill="none" stroke="#3b82f6" stroke-width="2" stroke-dasharray="16 12" stroke-opacity="0.3"/>
 
-  <!-- Bulldozer / Heavy Machinery Silhouette in center -->
-  <g transform="translate(76, 110)">
-    <!-- Cabin -->
-    <path d="M 120 70 L 220 70 L 250 140 L 120 140 Z" fill="#ffffff" opacity="0.95"/>
-    <path d="M 135 85 L 185 85 L 185 130 L 135 130 Z" fill="#0a2342"/>
-    <path d="M 195 85 L 230 85 L 245 130 L 195 130 Z" fill="#0a2342"/>
+  <!-- Ground grading reference line (horizon) -->
+  <line x1="60" y1="362" x2="452" y2="362" stroke="#38bdf8" stroke-width="4" stroke-opacity="0.4" stroke-linecap="round"/>
 
-    <!-- Engine Hood & Body -->
-    <rect x="250" y="100" width="70" height="40" rx="6" fill="#f59e0b"/>
-    <rect x="90" y="140" width="240" height="35" rx="8" fill="url(#goldGrad)"/>
+  <!-- ========================================================================= -->
+  <!-- MOTONIVELADORA (MOTOR GRADER) OFFICIAL SILHOUETTE                         -->
+  <!-- ========================================================================= -->
+  <g id="motoniveladora" transform="translate(0, 8)">
 
-    <!-- Exhaust Pipe -->
-    <rect x="270" y="55" width="12" height="45" rx="3" fill="#cbd5e1"/>
-    <path d="M 282 55 Q 295 50 300 40" stroke="#cbd5e1" stroke-width="8" stroke-linecap="round" fill="none"/>
+    <!-- 1. CHASSIS PRINCIPAL / GOOSENECK BEAM (Chasis largo arqueado) -->
+    <!-- Vigas del chasis que descienden desde la cabina hasta el eje delantero -->
+    <path d="M 235 240 C 265 205, 335 195, 415 258 L 415 275 C 335 220, 275 228, 235 260 Z" 
+          fill="url(#graderYellow)" stroke="#b45309" stroke-width="2.5"/>
+    <path d="M 248 244 C 275 215, 335 208, 405 262" 
+          fill="none" stroke="#fef08a" stroke-width="2.5" stroke-linecap="round" opacity="0.8"/>
 
-    <!-- Bulldozer Push Arm & Blade -->
-    <path d="M 240 160 L 330 190" stroke="#d97706" stroke-width="16" stroke-linecap="round"/>
-    <path d="M 330 120 C 355 160, 355 210, 330 240 L 315 235 C 335 205, 335 155, 315 125 Z" fill="#f59e0b"/>
+    <!-- Nariz delantera con contrapeso / bloque de empuje -->
+    <path d="M 412 255 L 436 260 L 436 295 L 412 290 Z" fill="#b45309"/>
+    <rect x="424" y="260" width="16" height="32" rx="3" fill="#d97706" stroke="#78350f" stroke-width="2"/>
 
-    <!-- Heavy Caterpillar Track System -->
-    <!-- Outer Track Oval -->
-    <rect x="70" y="170" width="230" height="75" rx="37.5" fill="#1e293b" stroke="#f8fafc" stroke-width="6"/>
-    <!-- Track Inner Cutout -->
-    <rect x="105" y="190" width="160" height="35" rx="17.5" fill="#0f172a"/>
-    <!-- Wheels Inside Track -->
-    <circle cx="125" cy="207.5" r="16" fill="#cbd5e1"/>
-    <circle cx="125" cy="207.5" r="7" fill="#0f172a"/>
-    <circle cx="165" cy="207.5" r="14" fill="#64748b"/>
-    <circle cx="165" cy="207.5" r="6" fill="#0f172a"/>
-    <circle cx="205" cy="207.5" r="14" fill="#64748b"/>
-    <circle cx="205" cy="207.5" r="6" fill="#0f172a"/>
-    <circle cx="245" cy="207.5" r="16" fill="#cbd5e1"/>
-    <circle cx="245" cy="207.5" r="7" fill="#0f172a"/>
+    <!-- 2. MECANISMO DE CUCHILLA CENTRAL (Círculo de giro, cilindros y hoja niveladora) -->
+    <!-- Cilindros hidráulicos de elevación de hoja -->
+    <line x1="305" y1="216" x2="310" y2="282" stroke="url(#steelGrad)" stroke-width="7" stroke-linecap="round"/>
+    <line x1="305" y1="216" x2="310" y2="250" stroke="#0284c7" stroke-width="11" stroke-linecap="round"/>
+    <line x1="340" y1="228" x2="345" y2="282" stroke="url(#steelGrad)" stroke-width="7" stroke-linecap="round"/>
+    <line x1="340" y1="228" x2="345" y2="255" stroke="#0284c7" stroke-width="11" stroke-linecap="round"/>
 
-    <!-- Track Treads Lines -->
-    <g stroke="#ffffff" stroke-width="4" stroke-linecap="round" opacity="0.6">
-      <line x1="85" y1="172" x2="85" y2="182"/>
-      <line x1="120" y1="170" x2="120" y2="180"/>
-      <line x1="155" y1="170" x2="155" y2="180"/>
-      <line x1="190" y1="170" x2="190" y2="180"/>
-      <line x1="225" y1="170" x2="225" y2="180"/>
-      <line x1="260" y1="170" x2="260" y2="180"/>
-      <line x1="285" y1="172" x2="285" y2="182"/>
-      <line x1="85" y1="235" x2="85" y2="245"/>
-      <line x1="120" y1="240" x2="120" y2="250"/>
-      <line x1="155" y1="240" x2="155" y2="250"/>
-      <line x1="190" y1="240" x2="190" y2="250"/>
-      <line x1="225" y1="240" x2="225" y2="250"/>
-      <line x1="260" y1="240" x2="260" y2="250"/>
-      <line x1="285" y1="235" x2="285" y2="245"/>
+    <!-- Barra de tiro y círculo de giro (Turntable) -->
+    <path d="M 268 290 L 370 286 L 372 297 L 270 301 Z" fill="#475569"/>
+    <ellipse cx="320" cy="294" rx="36" ry="7" fill="#64748b" stroke="#334155" stroke-width="2"/>
+
+    <!-- HOJA / CUCHILLA NIVELADORA CENTRAL CARACTERÍSTICA (MOLDBOARD) -->
+    <!-- Inclinada hacia el suelo entre el eje delantero y trasero -->
+    <path d="M 275 292 L 368 288 L 362 334 L 268 338 Z" fill="url(#steelGrad)" stroke="#334155" stroke-width="2.5"/>
+    <!-- Cuchilla de corte inferior de acero endurecido -->
+    <polygon points="266,334 364,330 360,342 262,346" fill="#f8fafc" stroke="#475569" stroke-width="1.5"/>
+    <!-- Refuerzos de la cuchilla -->
+    <line x1="285" y1="298" x2="281" y2="336" stroke="#94a3b8" stroke-width="2"/>
+    <line x1="315" y1="296" x2="311" y2="334" stroke="#94a3b8" stroke-width="2"/>
+    <line x1="345" y1="294" x2="341" y2="332" stroke="#94a3b8" stroke-width="2"/>
+
+    <!-- 3. COMPARTIMENTO DE MOTOR TRASERO (Capó del motor) -->
+    <rect x="85" y="235" width="130" height="48" rx="8" fill="url(#graderYellow)" stroke="#b45309" stroke-width="2"/>
+    <!-- Rejillas de ventilación del motor -->
+    <g stroke="#78350f" stroke-width="2.5" stroke-linecap="round">
+      <line x1="95" y1="248" x2="135" y2="248"/>
+      <line x1="95" y1="256" x2="135" y2="256"/>
+      <line x1="95" y1="264" x2="135" y2="264"/>
     </g>
+    <!-- Tubo de escape vertical trasero con codo característico -->
+    <rect x="110" y="190" width="8" height="46" rx="2" fill="url(#steelGrad)" stroke="#475569" stroke-width="1.5"/>
+    <path d="M 118 190 Q 124 186 128 178" stroke="url(#steelGrad)" stroke-width="6" stroke-linecap="round" fill="none"/>
+    <!-- Filtro de aire cilíndrico (Precleaner) -->
+    <rect x="135" y="205" width="10" height="30" rx="2" fill="#334155"/>
+    <circle cx="140" cy="204" r="9" fill="#475569"/>
+
+    <!-- 4. CABINA ELEVADA DEL OPERADOR (ROPS Hexagonal con visibilidad 360°) -->
+    <!-- Techo de la cabina -->
+    <path d="M 175 162 L 255 162 L 260 172 L 170 172 Z" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/>
+    <!-- Estructura de cabina -->
+    <path d="M 180 172 L 254 172 L 264 245 L 172 245 Z" fill="#0f172a" stroke="#d97706" stroke-width="3"/>
+    <!-- Ventanales de vidrio frontal y lateral -->
+    <path d="M 218 176 L 250 176 L 258 238 L 218 238 Z" fill="url(#cabGlass)"/>
+    <path d="M 184 176 L 212 176 L 212 238 L 178 238 Z" fill="url(#cabGlass)"/>
+    <!-- Destello de luz en el cristal -->
+    <line x1="228" y1="180" x2="242" y2="234" stroke="#ffffff" stroke-width="3" stroke-linecap="round" opacity="0.7"/>
+
+    <!-- 5. TANDEM TRASERO (Balancín entre las 2 ruedas traseras) -->
+    <rect x="115" y="298" width="85" height="18" rx="6" fill="#334155" stroke="#1e293b" stroke-width="2"/>
+
+    <!-- 6. RUEDAS Y NEUMÁTICOS INDUSTRIALES DE TRACCIÓN (O TRASERO + O DELANTERO) -->
+    <!-- RUEDA TRASERA 1 -->
+    <g transform="translate(122, 314)">
+      <!-- Neumático exterior con banda de rodadura de tractor/motoniveladora -->
+      <circle cx="0" cy="0" r="42" fill="url(#tireGrad)" stroke="#f8fafc" stroke-width="3.5"/>
+      <circle cx="0" cy="0" r="32" fill="#0f172a"/>
+      <!-- Llanta amarilla de acero -->
+      <circle cx="0" cy="0" r="23" fill="url(#graderYellow)" stroke="#b45309" stroke-width="2"/>
+      <!-- Maza central y tuercas -->
+      <circle cx="0" cy="0" r="10" fill="#334155"/>
+      <circle cx="0" cy="0" r="4" fill="#f8fafc"/>
+      <!-- Tacos del neumático -->
+      <path d="M -30 -30 L -24 -24 M 0 -42 L 0 -34 M 30 -30 L 24 -24 M 42 0 L 34 0 M 30 30 L 24 24 M 0 42 L 0 34 M -30 30 L -24 24 M -42 0 L -34 0" 
+            stroke="#475569" stroke-width="3.5" stroke-linecap="round"/>
+    </g>
+
+    <!-- RUEDA TRASERA 2 -->
+    <g transform="translate(202, 314)">
+      <circle cx="0" cy="0" r="42" fill="url(#tireGrad)" stroke="#f8fafc" stroke-width="3.5"/>
+      <circle cx="0" cy="0" r="32" fill="#0f172a"/>
+      <circle cx="0" cy="0" r="23" fill="url(#graderYellow)" stroke="#b45309" stroke-width="2"/>
+      <circle cx="0" cy="0" r="10" fill="#334155"/>
+      <circle cx="0" cy="0" r="4" fill="#f8fafc"/>
+      <path d="M -30 -30 L -24 -24 M 0 -42 L 0 -34 M 30 -30 L 24 -24 M 42 0 L 34 0 M 30 30 L 24 24 M 0 42 L 0 34 M -30 30 L -24 24 M -42 0 L -34 0" 
+            stroke="#475569" stroke-width="3.5" stroke-linecap="round"/>
+    </g>
+
+    <!-- RUEDA DELANTERA (Inclinación característica de motoniveladora) -->
+    <g transform="translate(406, 314)">
+      <!-- Brazo de suspensión y dirección del eje delantero -->
+      <line x1="0" y1="-32" x2="6" y2="0" stroke="#78350f" stroke-width="12" stroke-linecap="round"/>
+      <circle cx="0" cy="0" r="42" fill="url(#tireGrad)" stroke="#f8fafc" stroke-width="3.5"/>
+      <circle cx="0" cy="0" r="32" fill="#0f172a"/>
+      <circle cx="0" cy="0" r="23" fill="url(#graderYellow)" stroke="#b45309" stroke-width="2"/>
+      <circle cx="0" cy="0" r="10" fill="#334155"/>
+      <circle cx="0" cy="0" r="4" fill="#f8fafc"/>
+      <path d="M -30 -30 L -24 -24 M 0 -42 L 0 -34 M 30 -30 L 24 -24 M 42 0 L 34 0 M 30 30 L 24 24 M 0 42 L 0 34 M -30 30 L -24 24 M -42 0 L -34 0" 
+            stroke="#475569" stroke-width="3.5" stroke-linecap="round"/>
+    </g>
+
   </g>
 
-  <!-- Accent Emblem / Text Badge at bottom -->
-  <g transform="translate(256, 440)">
-    <rect x="-140" y="-22" width="280" height="34" rx="17" fill="url(#goldGrad)"/>
-    <text x="0" y="2" text-anchor="middle" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-weight="900" font-size="16" fill="#0a2342" letter-spacing="3">CONTROL</text>
+  <!-- ========================================================================= -->
+  <!-- DISTINTIVO INFERIOR: CONTROL DE MAQUINARIA                                -->
+  <!-- ========================================================================= -->
+  <g transform="translate(256, 442)">
+    <rect x="-145" y="-18" width="290" height="34" rx="17" fill="url(#graderYellow)" stroke="#b45309" stroke-width="1.5"/>
+    <text x="0" y="5" text-anchor="middle" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" 
+          font-weight="900" font-size="14.5" fill="#0a2342" letter-spacing="3.5">
+      CONTROL DE MAQUINARIA
+    </text>
   </g>
 </svg>
