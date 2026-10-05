@@ -44,7 +44,7 @@ export const Registros: React.FC<RegistrosProps> = ({
   const [hasta, setHasta] = useState<string>('');
   const [maquinariaFiltro, setMaquinariaFiltro] = useState<string>('TODAS');
 
-  // Real Server-Side Pagination State (limit 200)
+  // Real Server-Side Pagination State (limit 100)
   const [paginaActual, setPaginaActual] = useState<number>(1);
   const [totalRegistros, setTotalRegistros] = useState<number>(0);
   const [totalPaginas, setTotalPaginas] = useState<number>(1);
@@ -59,7 +59,7 @@ export const Registros: React.FC<RegistrosProps> = ({
   // Debounce ref for search input
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Function to load the requested page with current filters from Google Sheets
+  // Function to load the requested page with current filters
   const cargarPagina = useCallback(async (
     pagina: number, 
     filtrosOverride?: { busqueda?: string; desde?: string; hasta?: string; maquinaria?: string }
@@ -83,13 +83,14 @@ export const Registros: React.FC<RegistrosProps> = ({
 
       if (res && res.ok) {
         setServiciosPaginados(res.datos || []);
-        setTotalRegistros(res.total || 0);
-        setTotalPaginas(Math.max(1, res.totalPaginas || 1));
+        const total = Number(res.total) || 0;
+        setTotalRegistros(total);
+        setTotalPaginas(Math.max(1, Math.ceil(total / 100)));
         setPaginaActual(res.pagina || pagina);
       }
     } catch (err: any) {
       console.error('Error al cargar servicios paginados:', err);
-      setErrorLocal(err.message || 'Error al conectar con Google Sheets');
+      setErrorLocal(err.message || 'Error al cargar los registros');
     } finally {
       setIsLoadingLocal(false);
     }
@@ -174,29 +175,36 @@ export const Registros: React.FC<RegistrosProps> = ({
   const inicioRegistro = totalRegistros === 0 ? 0 : (paginaActual - 1) * ITEMS_POR_PAGINA + 1;
   const finRegistro = Math.min(paginaActual * ITEMS_POR_PAGINA, totalRegistros);
 
-  // Generate pagination buttons array (e.g. [1, 2, 3, 4, 5] for 940 records)
+  // Generate pagination buttons array (e.g. 1 | 2 | 3 | ... | 10, or 1 | ... | 4 | 5 | 6 | ... | 10, or 1 | ... | 8 | 9 | 10)
   const generarNumerosPagina = (actual: number, totalPags: number): (number | string)[] => {
-    const paginas: (number | string)[] = [];
-    if (totalPags <= 7) {
+    if (totalPags <= 1) return [1];
+    if (totalPags <= 6) {
+      const paginas: number[] = [];
       for (let i = 1; i <= totalPags; i++) {
         paginas.push(i);
       }
-    } else {
-      paginas.push(1);
-      if (actual > 3) {
-        paginas.push('...');
-      }
-      const start = Math.max(2, actual - 1);
-      const end = Math.min(totalPags - 1, actual + 1);
-      for (let i = start; i <= end; i++) {
-        paginas.push(i);
-      }
-      if (actual < totalPags - 2) {
-        paginas.push('...');
-      }
-      paginas.push(totalPags);
+      return paginas;
     }
-    return paginas;
+
+    // Always include first (1) and last (totalPags) page buttons
+    // Page 1 or 2: 1 | 2 | 3 | ... | totalPags
+    if (actual <= 2) {
+      return [1, 2, 3, '...', totalPags];
+    }
+    // Page 3: 1 | 2 | 3 | 4 | ... | totalPags
+    if (actual === 3) {
+      return [1, 2, 3, 4, '...', totalPags];
+    }
+    // Last page or second to last: 1 | ... | totalPags - 2 | totalPags - 1 | totalPags
+    if (actual >= totalPags - 1) {
+      return [1, '...', totalPags - 2, totalPags - 1, totalPags];
+    }
+    // Third from last: 1 | ... | totalPags - 3 | totalPags - 2 | totalPags - 1 | totalPags
+    if (actual === totalPags - 2) {
+      return [1, '...', totalPags - 3, totalPags - 2, totalPags - 1, totalPags];
+    }
+    // Middle pages (e.g. page 5 of 10): 1 | ... | 4 | 5 | 6 | ... | 10
+    return [1, '...', actual - 1, actual, actual + 1, '...', totalPags];
   };
 
   return (
@@ -213,9 +221,6 @@ export const Registros: React.FC<RegistrosProps> = ({
                 {formatNumber(totalRegistros)} {totalRegistros === 1 ? 'registro' : 'registros'}
               </span>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Paginación real de hasta 200 registros por página directamente desde Google Sheets
-            </p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -223,7 +228,7 @@ export const Registros: React.FC<RegistrosProps> = ({
               onClick={() => cargarPagina(paginaActual)}
               disabled={isLoadingLocal}
               className="p-2.5 sm:px-3.5 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              title="Recargar esta página desde Google Sheets"
+              title="Actualizar registros"
             >
               <RefreshCw className={`w-4 h-4 ${isLoadingLocal ? 'animate-spin text-blue-600' : ''}`} />
               <span className="hidden sm:inline">Actualizar</span>
@@ -374,10 +379,7 @@ export const Registros: React.FC<RegistrosProps> = ({
       {isLoadingLocal ? (
         <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-xs">
           <RefreshCw className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-3" />
-          <h3 className="font-extrabold text-slate-800 text-base">Cargando registros oficiales...</h3>
-          <p className="text-xs text-slate-500 mt-1">
-            Obteniendo página {paginaActual} (hasta 200 registros) desde Google Sheets
-          </p>
+          <h3 className="font-extrabold text-slate-800 text-base">Cargando registros...</h3>
         </div>
       ) : serviciosPaginados.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-xs space-y-4">
@@ -389,7 +391,7 @@ export const Registros: React.FC<RegistrosProps> = ({
             <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
               {busqueda || desde || hasta || maquinariaFiltro !== 'TODAS'
                 ? 'No se encontraron registros que coincidan con los filtros aplicados.'
-                : 'Aún no hay servicios registrados en la hoja de Google Sheets. Utilice el botón "Nuevo Servicio" para agregar el primero.'}
+                : 'Aún no hay servicios registrados en el sistema. Utilice el botón "Nuevo Servicio" para agregar el primero.'}
             </p>
           </div>
           {busqueda || desde || hasta || maquinariaFiltro !== 'TODAS' ? (
@@ -410,7 +412,7 @@ export const Registros: React.FC<RegistrosProps> = ({
         </div>
       ) : (
         <>
-          {/* MOBILE VIEW: Touch-friendly stacked cards (Máx 200) */}
+          {/* MOBILE VIEW: Touch-friendly stacked cards (Máx 100) */}
           <div className="block md:hidden space-y-3">
             {serviciosPaginados.map((s) => (
               <div
@@ -510,7 +512,7 @@ export const Registros: React.FC<RegistrosProps> = ({
             ))}
           </div>
 
-          {/* DESKTOP VIEW: High-density Data Table (Máx 200 filas) */}
+          {/* DESKTOP VIEW: High-density Data Table (Máx 100 filas) */}
           <div className="hidden md:block bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
@@ -600,7 +602,7 @@ export const Registros: React.FC<RegistrosProps> = ({
                           <button
                             onClick={() => setServicioAEliminar(s)}
                             className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
-                            title="Eliminar de Google Sheets"
+                            title="Eliminar servicio"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -705,8 +707,8 @@ export const Registros: React.FC<RegistrosProps> = ({
                 Se eliminará permanentemente el registro{' '}
                 <strong className="text-slate-800 font-mono">
                   {servicioAEliminar.nroServicio}
-                </strong>{' '}
-                de la hoja de Google Sheets.
+                </strong>
+                .
               </p>
             </div>
 
