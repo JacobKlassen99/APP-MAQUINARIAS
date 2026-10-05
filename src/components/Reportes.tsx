@@ -12,8 +12,10 @@ import {
   Layers,
   Users,
   Tractor,
-  UserCheck
+  UserCheck,
+  FileSpreadsheet
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { Servicio, TipoReporte, ReporteItem, Cliente } from '../types';
 import { 
   formatCurrency, 
@@ -360,6 +362,200 @@ export const Reportes: React.FC<ReportesProps> = ({
     window.print();
   };
 
+  const handleExportarExcel = () => {
+    try {
+      const wb = XLSX.utils.book_new();
+
+      if (tipoReporte === 'cliente_especifico') {
+        if (!clienteSeleccionado) {
+          alert('Por favor seleccione un cliente en el buscador superior para exportar el reporte.');
+          return;
+        }
+
+        const aoa: any[][] = [
+          ['CONTROL DE MAQUINARIA'],
+          ['REPORTE DETALLADO POR CLIENTE'],
+          [],
+          ['Cuenta:', clienteSeleccionado.cuenta || 'S/N'],
+          ['Cliente:', clienteSeleccionado.nombre],
+          ['Período:', periodoTexto],
+          ['Fecha de Emisión:', new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })],
+          [],
+          ['RESUMEN POR MAQUINARIA E IMPLEMENTO'],
+          []
+        ];
+
+        // Resumen jerárquico Maquinaria -> Implemento
+        datosReporteCliente.resumenJerarquico.forEach(m => {
+          aoa.push([m.maquinaria.toUpperCase()]);
+          m.implementos.forEach(imp => {
+            aoa.push(['', imp.implemento, imp.total]);
+          });
+          aoa.push([`TOTAL ${m.maquinaria.toUpperCase()}`, '', m.totalMaquinaria]);
+          aoa.push([]);
+        });
+
+        aoa.push(['TOTAL GENERAL', '', datosReporteCliente.totalGeneralCliente]);
+        aoa.push([]);
+        aoa.push([]);
+
+        // Detalle de servicios del cliente
+        aoa.push([`DETALLE DE SERVICIOS DEL CLIENTE (${datosReporteCliente.serviciosCliente.length} SERVICIOS)`]);
+        aoa.push([
+          'Nro. Servicio',
+          'Fecha',
+          'Maquinaria',
+          'Implemento',
+          'Operador',
+          'Tipo',
+          'Inicio',
+          'Fin',
+          'Cantidad',
+          'Unidad',
+          'Horas',
+          'Precio ($us)',
+          'Total ($us)'
+        ]);
+
+        datosReporteCliente.serviciosCliente.forEach(s => {
+          aoa.push([
+            s.nroServicio,
+            formatDateDisplay(s.fecha),
+            s.maquinaria,
+            s.implemento || '—',
+            s.operador,
+            s.tipo || '—',
+            s.inicio || '—',
+            s.fin || '—',
+            Number(s.cantidad) || 0,
+            s.unidad,
+            Number(s.horas) || 0,
+            Number(s.precio) || 0,
+            Number(s.total) || 0
+          ]);
+        });
+
+        // Totales al pie
+        aoa.push([
+          'TOTALES',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          datosReporteCliente.totalCantidadCliente,
+          '',
+          datosReporteCliente.totalHorasCliente,
+          '',
+          datosReporteCliente.totalGeneralCliente
+        ]);
+
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws['!cols'] = [
+          { wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 22 },
+          { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
+          { wch: 12 }, { wch: 14 }, { wch: 16 }
+        ];
+
+        XLSX.utils.book_append_sheet(wb, ws, 'Reporte Cliente');
+        const filename = `Reporte_Cliente_${clienteSeleccionado.cuenta || 'SN'}_${clienteSeleccionado.nombre.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`;
+        XLSX.writeFile(wb, filename);
+        return;
+      }
+
+      // Otros tipos de reporte
+      let tituloReporte = 'REPORTE CONSOLIDADO';
+      let nombreHoja = 'Resumen';
+      if (tipoReporte === 'maquinaria') {
+        tituloReporte = 'RESUMEN POR MAQUINARIA E IMPLEMENTO';
+        nombreHoja = 'Maquinaria e Implemento';
+      } else if (tipoReporte === 'cliente') {
+        tituloReporte = 'RESUMEN GENERAL POR CLIENTE';
+        nombreHoja = 'Clientes';
+      } else if (tipoReporte === 'maquinaria_cliente') {
+        tituloReporte = 'REPORTE POR MAQUINARIA, IMPLEMENTO Y CLIENTE';
+        nombreHoja = 'Maquinaria y Cliente';
+      } else if (tipoReporte === 'operador') {
+        tituloReporte = 'RESUMEN POR OPERADOR';
+        nombreHoja = 'Operadores';
+      }
+
+      const aoa: any[][] = [
+        ['CONTROL DE MAQUINARIA'],
+        [tituloReporte],
+        ['Período:', periodoTexto],
+        ['Fecha de Emisión:', new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })],
+        []
+      ];
+
+      if (tipoReporte === 'maquinaria') {
+        aoa.push(['Maquinaria', 'Implemento', 'Servicios', 'Horas', 'Cantidad', 'Total ($us)']);
+        items.forEach(item => {
+          aoa.push([
+            item.categoria,
+            item.subcategoria || '—',
+            item.servicios,
+            item.horas,
+            item.cantidad,
+            item.total
+          ]);
+        });
+        aoa.push(['TOTAL GENERAL', '', totalServicios, totalHoras, totalCantidad, totalGeneral]);
+      } else if (tipoReporte === 'cliente') {
+        aoa.push(['Cuenta', 'Cliente', 'Servicios', 'Horas', 'Cantidad', 'Total ($us)']);
+        items.forEach(item => {
+          aoa.push([
+            item.subcategoria || 'S/N',
+            item.categoria,
+            item.servicios,
+            item.horas,
+            item.cantidad,
+            item.total
+          ]);
+        });
+        aoa.push(['TOTAL GENERAL', '', totalServicios, totalHoras, totalCantidad, totalGeneral]);
+      } else if (tipoReporte === 'maquinaria_cliente') {
+        aoa.push(['Maquinaria', 'Implemento y Cliente', 'Servicios', 'Horas', 'Cantidad', 'Total ($us)']);
+        items.forEach(item => {
+          aoa.push([
+            item.categoria,
+            item.subcategoria || '—',
+            item.servicios,
+            item.horas,
+            item.cantidad,
+            item.total
+          ]);
+        });
+        aoa.push(['TOTAL GENERAL', '', totalServicios, totalHoras, totalCantidad, totalGeneral]);
+      } else if (tipoReporte === 'operador') {
+        aoa.push(['Operador', 'Servicios', 'Horas', 'Cantidad', 'Total ($us)']);
+        items.forEach(item => {
+          aoa.push([
+            item.categoria,
+            item.servicios,
+            item.horas,
+            item.cantidad,
+            item.total
+          ]);
+        });
+        aoa.push(['TOTAL GENERAL', totalServicios, totalHoras, totalCantidad, totalGeneral]);
+      }
+
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = [
+        { wch: 22 }, { wch: 22 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 18 }, { wch: 18 }, { wch: 18 }
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, nombreHoja.slice(0, 31));
+      const filename = `Reporte_${tipoReporte}_${periodoTexto.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`;
+      XLSX.writeFile(wb, filename);
+    } catch (err: any) {
+      console.error('Error al exportar Excel:', err);
+      alert('Error al generar archivo Excel: ' + (err.message || 'Error desconocido'));
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* ================= CONTROLES DEL REPORTE (NO SE IMPRIMEN) ================= */}
@@ -377,7 +573,7 @@ export const Reportes: React.FC<ReportesProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {onRefrescarServicios && (
               <button
                 type="button"
@@ -393,8 +589,18 @@ export const Reportes: React.FC<ReportesProps> = ({
 
             <button
               type="button"
+              onClick={handleExportarExcel}
+              className="h-11 px-4 sm:px-5 bg-green-700 hover:bg-green-800 active:scale-[0.99] text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md shadow-green-700/20 transition flex items-center justify-center gap-2 cursor-pointer relative z-10"
+              title="Descargar reporte en formato Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>EXPORTAR A EXCEL</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleImprimirReporte}
-              className="h-11 px-5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2 cursor-pointer relative z-10"
+              className="h-11 px-4 sm:px-5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2 cursor-pointer relative z-10"
             >
               <Printer className="w-4 h-4" />
               <span>IMPRIMIR REPORTE</span>

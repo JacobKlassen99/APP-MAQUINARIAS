@@ -371,22 +371,37 @@ function obtenerServicios(filtros) {
     // Normalización de inicio y fin (NUNCA convertir a Date ni GMT)
     let strInicio = '';
     let strFin = '';
-    if (fila[8] instanceof Date) {
-      strInicio = '';
-    } else if (fila[8] !== undefined && fila[8] !== null) {
-      strInicio = String(fila[8]).trim();
-      if (strInicio.indexOf('GMT') !== -1 || strInicio.indexOf('hora de') !== -1) {
-        strInicio = '';
+    
+    function limpiarValorCelda(val) {
+      if (val === null || val === undefined) return '';
+      if (val instanceof Date) {
+        const y = val.getFullYear();
+        const m = val.getMonth() + 1;
+        // Si el año es un número de horómetro (ej: 4021, 5779, etc.)
+        if (y > 3000) {
+          return m > 0 ? (y + '.' + m) : String(y);
+        }
+        // Si es hora de reloj (ej: 08:00)
+        return Utilities.formatDate(val, zonaHoraria, 'HH:mm');
       }
-    }
-    if (fila[9] instanceof Date) {
-      strFin = '';
-    } else if (fila[9] !== undefined && fila[9] !== null) {
-      strFin = String(fila[9]).trim();
-      if (strFin.indexOf('GMT') !== -1 || strFin.indexOf('hora de') !== -1) {
-        strFin = '';
+      let s = String(val).trim();
+      if (s.indexOf('GMT') !== -1 || s.indexOf('hora de') !== -1) {
+        const match = s.match(/([A-Za-z]{3})\s+(\d{1,2})\s+(\d{3,5})/);
+        if (match) {
+          const mStr = match[1];
+          const yStr = match[3];
+          const mMap = { Jan:1, Ene:1, Feb:2, Mar:3, Apr:4, Abr:4, May:5, Jun:6, Jul:7, Aug:8, Ago:8, Sep:9, Oct:10, Nov:11, Dec:12 };
+          const mVal = mMap[mStr];
+          return mVal ? (yStr + '.' + mVal) : yStr;
+        }
+        const yMatch = s.match(/\b([1-9]\d{2,4})\b/);
+        return yMatch ? yMatch[1] : '';
       }
+      return s;
     }
+
+    strInicio = limpiarValorCelda(fila[8]);
+    strFin = limpiarValorCelda(fila[9]);
 
     const servicio = {
       id: nroServicio,

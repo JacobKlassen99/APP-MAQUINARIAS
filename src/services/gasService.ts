@@ -10,7 +10,7 @@ import {
   TipoReporte,
   ReporteItem
 } from '../types';
-import { ordenarServiciosDesc } from '../utils/formatters';
+import { ordenarServiciosDesc, limpiarValorHorometro } from '../utils/formatters';
 
 declare global {
   interface Window {
@@ -219,16 +219,22 @@ async function callGasPost<T = any>(action: string, datos: any = {}, extraProps:
 function normalizarServicios(raw: any[]): Servicio[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((item) => {
-    const nro = String(item.numero || item.nroServicio || '').trim();
+    const nro = String(item.numero || item.nroServicio || item.id || '').trim();
     
-    // NUNCA permitir cadenas de fecha/GMT en horómetro o inicio/fin
-    let rawInicio = String(item.inicio ?? '').trim();
-    let rawFin = String(item.fin ?? '').trim();
-    if (rawInicio.includes('GMT') || rawInicio.includes('hora de') || /^[A-Z][a-z]{2}\s[A-Z][a-z]{2}\s\d+/.test(rawInicio)) {
-      rawInicio = '';
-    }
-    if (rawFin.includes('GMT') || rawFin.includes('hora de') || /^[A-Z][a-z]{2}\s[A-Z][a-z]{2}\s\d+/.test(rawFin)) {
-      rawFin = '';
+    const rawHoras = Number(item.horas) || 0;
+    const cleanInicio = limpiarValorHorometro(item.inicio, rawHoras);
+    const cleanFin = limpiarValorHorometro(item.fin, rawHoras, cleanInicio);
+
+    // Normalizar Tipo de medición
+    let rawTipo = String(item.tipo || '').trim();
+    let normTipo: any = '';
+    const tipoLower = rawTipo.toLowerCase();
+    if (tipoLower.includes('horar') || (cleanInicio.includes(':') && cleanFin.includes(':'))) {
+      normTipo = 'Horario';
+    } else if (tipoLower.includes('horom') || cleanInicio || cleanFin) {
+      normTipo = 'Horómetro';
+    } else if (rawTipo) {
+      normTipo = rawTipo;
     }
 
     const filaNum = typeof item.fila === 'number' 
@@ -246,12 +252,12 @@ function normalizarServicios(raw: any[]): Servicio[] {
       maquinaria: String(item.maquinaria || '').trim(),
       implemento: String(item.implemento || '').trim(),
       operador: String(item.operador || '').trim(),
-      tipo: (item.tipo as any) || '',
-      inicio: rawInicio,
-      fin: rawFin,
-      cantidad: Number(item.cantidad) || 0,
+      tipo: normTipo,
+      inicio: cleanInicio,
+      fin: cleanFin,
+      cantidad: Number(item.cantidad) || (normTipo === 'Horómetro' || normTipo === 'Horario' ? rawHoras : 0),
       unidad: (item.unidad as any) || 'Hora',
-      horas: Number(item.horas) || 0,
+      horas: rawHoras,
       precio: Number(item.precio) || 0,
       total: Number(item.total) || 0,
       id: nro,
@@ -612,17 +618,16 @@ export const gasService = {
       : (typeof datos.filaIndex === 'number' 
         ? datos.filaIndex 
         : (parseInt(datos.fila || datos.filaIndex, 10) || undefined));
-    const nro = datos.numero || datos.nroServicio;
+    const nro = String(datos.numero || datos.nroServicio || datos.id || '').trim();
 
-    let iniStr = String(datos.inicio ?? '').trim();
-    let finStr = String(datos.fin ?? '').trim();
-    if (iniStr.includes('GMT') || iniStr.includes('hora de')) iniStr = '';
-    if (finStr.includes('GMT') || finStr.includes('hora de')) finStr = '';
+    const cleanIni = limpiarValorHorometro(datos.inicio, Number(datos.horas));
+    const cleanFin = limpiarValorHorometro(datos.fin, Number(datos.horas), cleanIni);
 
     const datosLimpios = {
       fila: filaNum,
       numero: nro,
       nroServicio: nro,
+      id: nro,
       fecha: datos.fecha,
       cuenta: String(datos.cuenta || ''),
       cliente: datos.cliente,
@@ -630,8 +635,8 @@ export const gasService = {
       implemento: datos.implemento || '',
       operador: datos.operador,
       tipo: datos.tipo || '',
-      inicio: iniStr,
-      fin: finStr,
+      inicio: cleanIni,
+      fin: cleanFin,
       cantidad: Number(datos.cantidad) || 0,
       unidad: datos.unidad || 'Hora',
       horas: Number(datos.horas) || 0,
@@ -654,10 +659,12 @@ export const gasService = {
     const extraProps: any = {};
     if (typeof filaNum === 'number') {
       extraProps.fila = filaNum;
+      extraProps.filaIndex = filaNum;
     }
     if (nro) {
       extraProps.numero = nro;
       extraProps.nroServicio = nro;
+      extraProps.id = nro;
     }
 
     const res = await callGasPost<any>('editarServicio', datosLimpios, extraProps);

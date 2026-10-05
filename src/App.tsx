@@ -148,17 +148,27 @@ export default function App() {
     }
   };
 
-  // Guardar Servicio (Priority requirement)
-  const handleGuardarServicio = async (datos: Omit<Servicio, 'nroServicio'> & { nroServicio?: string; forzarGuardar?: boolean }) => {
+  // Guardar o Editar Servicio
+  const handleGuardarServicio = async (datos: Servicio & { forzarGuardar?: boolean }, guardarYNuevo = false) => {
     setIsSaving(true);
     try {
-      const esEdicion = !!datos.nroServicio;
+      const esEdicion = !!servicioEdicion;
+      const datosParaGuardar = {
+        ...datos,
+        fila: servicioEdicion?.fila ?? datos.fila,
+        numero: servicioEdicion?.numero || servicioEdicion?.nroServicio || datos.numero || datos.nroServicio,
+        nroServicio: servicioEdicion?.nroServicio || servicioEdicion?.numero || datos.nroServicio || datos.numero,
+      };
+
       const res = esEdicion
-        ? await gasService.editarServicio(datos)
-        : await gasService.guardarServicio(datos, datos.forzarGuardar);
+        ? await gasService.editarServicio(datosParaGuardar)
+        : await gasService.guardarServicio(datosParaGuardar, datos.forzarGuardar);
 
       if (res && (res.exito || res.ok)) {
-        showToast(res.mensaje || 'Servicio guardado correctamente en Google Sheets.', 'ok');
+        const msg = esEdicion 
+          ? (res.mensaje || 'Servicio actualizado correctamente.')
+          : (res.mensaje || `Servicio ${res.nroServicio || ''} guardado correctamente.`);
+        showToast(msg, 'ok');
         setServicioEdicion(null);
 
         // Si se guardó un nuevo servicio, actualizar correlativo SERV-
@@ -177,15 +187,22 @@ export default function App() {
           cargarServiciosReportes(true);
         }
 
-        // Cambiar a Registros para inspeccionar el nuevo servicio en la cima
-        setActiveTab('registros');
+        // Si es Guardar y Nuevo, permanecer en Nuevo Servicio
+        if (!esEdicion && guardarYNuevo) {
+          setActiveTab('nuevo');
+        } else {
+          setActiveTab('registros');
+        }
+        return true;
       } else {
         const errorMsg = res?.mensaje || 'No se pudo guardar el servicio en Google Sheets.';
         showToast(`No se pudo guardar el servicio: ${errorMsg}`, 'error');
+        return false;
       }
     } catch (err: any) {
       console.error('Error al guardar servicio:', err);
       showToast(`No se pudo guardar el servicio: ${err.message || 'Error del servidor'}`, 'error');
+      return false;
     } finally {
       setIsSaving(false);
     }

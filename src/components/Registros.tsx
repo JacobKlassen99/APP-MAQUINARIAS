@@ -17,7 +17,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { Servicio } from '../types';
-import { formatCurrency, formatNumber, formatDateDisplay } from '../utils/formatters';
+import { formatCurrency, formatNumber, formatDateDisplay, limpiarValorHorometro } from '../utils/formatters';
 import { gasService } from '../services/gasService';
 
 interface RegistrosProps {
@@ -564,9 +564,13 @@ export const Registros: React.FC<RegistrosProps> = ({
                         {s.unidad === 'Hora' && s.tipo && (
                           <div className="text-[10px] text-slate-400">
                             {s.tipo === 'Horómetro' ? (
-                              s.inicio && s.fin ? `Horómetro: ${s.inicio} → ${s.fin}` : 'Horómetro'
+                              limpiarValorHorometro(s.inicio) && limpiarValorHorometro(s.fin) 
+                                ? `Horómetro: ${limpiarValorHorometro(s.inicio)} → ${limpiarValorHorometro(s.fin)}` 
+                                : 'Horómetro'
                             ) : (
-                              s.inicio && s.fin ? `Horario: ${s.inicio} - ${s.fin}` : s.tipo
+                              s.inicio && s.fin && !s.inicio.includes('GMT') && !s.fin.includes('GMT') 
+                                ? `Horario: ${s.inicio} - ${s.fin}` 
+                                : s.tipo
                             )}
                           </div>
                         )}

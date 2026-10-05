@@ -28,7 +28,8 @@ import {
   formatNumber, 
   calcularHoras, 
   getTodayDateString,
-  coincideCliente
+  coincideCliente,
+  limpiarValorHorometro
 } from '../utils/formatters';
 
 interface NuevoServicioProps {
@@ -38,7 +39,7 @@ interface NuevoServicioProps {
   servicioEdicion?: Servicio | null;
   siguienteNumero: string;
   isSaving?: boolean;
-  onGuardar: (servicio: Omit<Servicio, 'nroServicio'> & { nroServicio?: string; forzarGuardar?: boolean }) => void;
+  onGuardar: (servicio: Servicio & { forzarGuardar?: boolean }, guardarYNuevo?: boolean) => Promise<boolean | void> | void;
   onCancelarEdicion?: () => void;
   checkDuplicate: (data: Partial<Servicio>, excludeNro?: string) => Servicio | null;
 }
@@ -80,20 +81,34 @@ export const NuevoServicio: React.FC<NuevoServicioProps> = ({
   // Initial load or edit mode population
   useEffect(() => {
     if (servicioEdicion) {
-      setFecha(servicioEdicion.fecha);
+      setFecha(servicioEdicion.fecha || getTodayDateString());
       setClienteSeleccionado({
-        cuenta: servicioEdicion.cuenta,
-        nombre: servicioEdicion.cliente
+        cuenta: String(servicioEdicion.cuenta || '').trim(),
+        nombre: String(servicioEdicion.cliente || '').trim()
       });
-      setOperador(servicioEdicion.operador);
-      setMaquinaria(servicioEdicion.maquinaria);
-      setImplemento(servicioEdicion.implemento || '');
-      setUnidad(servicioEdicion.unidad);
-      setPrecio(servicioEdicion.precio);
-      setTipoHora(servicioEdicion.tipo || 'Horómetro');
-      setInicio(servicioEdicion.inicio || '');
-      setFin(servicioEdicion.fin || '');
-      setCantidad(servicioEdicion.cantidad);
+      setOperador(String(servicioEdicion.operador || '').trim());
+      setMaquinaria(String(servicioEdicion.maquinaria || '').trim());
+      setImplemento(String(servicioEdicion.implemento || '').trim());
+      setUnidad(servicioEdicion.unidad || 'Hora');
+      setPrecio(Number(servicioEdicion.precio) || 0);
+
+      // Normalizar tipo de medición (Horómetro vs Horario)
+      const t = String(servicioEdicion.tipo || '').toLowerCase();
+      const rawInicio = String(servicioEdicion.inicio || '');
+      const rawFin = String(servicioEdicion.fin || '');
+      const esHorario = t.includes('horar') || (rawInicio.includes(':') && rawFin.includes(':'));
+      const tipoNormalizado: TipoHora = esHorario ? 'Horario' : 'Horómetro';
+      setTipoHora(tipoNormalizado);
+
+      // Limpiar inicio y fin de cualquier texto de GMT, fecha o zona horaria
+      const rawHoras = Number(servicioEdicion.horas) || 0;
+      const iniLimpio = limpiarValorHorometro(servicioEdicion.inicio, rawHoras);
+      const finLimpio = limpiarValorHorometro(servicioEdicion.fin, rawHoras, iniLimpio);
+      setInicio(iniLimpio);
+      setFin(finLimpio);
+
+      const cant = Number(servicioEdicion.cantidad) || (tipoNormalizado === 'Horómetro' || tipoNormalizado === 'Horario' ? rawHoras : 0);
+      setCantidad(cant);
       setFormError(null);
     } else {
       resetForm();
@@ -179,6 +194,10 @@ export const NuevoServicio: React.FC<NuevoServicioProps> = ({
 
   if (unidad === 'Hora') {
     horasCalculadas = calcularHoras(tipoHora, inicio, fin);
+    // Si estamos editando y ya existían horas válidas pero inicio/fin no están completos
+    if (horasCalculadas <= 0 && servicioEdicion && Number(servicioEdicion.horas) > 0 && (!inicio || !fin)) {
+      horasCalculadas = Number(servicioEdicion.horas);
+    }
     cantidadEfectiva = horasCalculadas;
   } else {
     horasCalculadas = 0;
@@ -188,7 +207,7 @@ export const NuevoServicio: React.FC<NuevoServicioProps> = ({
   const totalCalculado = Math.round(cantidadEfectiva * precio * 100) / 100;
 
   // Submit Handler
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent, guardarYNuevo = false) => {
     e.preventDefault();
     setFormError(null);
 
@@ -214,10 +233,12 @@ export const NuevoServicio: React.FC<NuevoServicioProps> = ({
 
     if (unidad === 'Hora') {
       if (!inicio || !fin) {
-        setFormError('Para servicios por Hora, ingrese Inicio y Fin.');
-        return;
-      }
-      if (horasCalculadas <= 0) {
+        // En registros históricos antiguos REC- o edición, si ya hay horas calculadas registradas
+        if (horasCalculadas <= 0) {
+          setFormError('Para servicios por Hora, ingrese Inicio y Fin.');
+          return;
+        }
+      } else if (horasCalculadas <= 0) {
         setFormError('Las horas calculadas deben ser mayores a 0. Verifique los valores de Inicio y Fin.');
         return;
       }
@@ -228,8 +249,14 @@ export const NuevoServicio: React.FC<NuevoServicioProps> = ({
       }
     }
 
-    const servicioData: Omit<Servicio, 'nroServicio'> & { nroServicio?: string; forzarGuardar?: boolean } = {
-      nroServicio: servicioEdicion?.nroServicio,
+    const nro = String(servicioEdicion?.numero || servicioEdicion?.nroServicio || servicioEdicion?.id || '').trim();
+    const filaNum = typeof servicioEdicion?.fila === 'number' ? servicioEdicion.fila : undefined;
+
+    const servicioData: Servicio & { forzarGuardar?: boolean } = {
+      nroServicio: nro,
+      numero: nro,
+      fila: filaNum,
+      id: nro,
       fecha,
       cuenta: clienteSeleccionado.cuenta,
       cliente: clienteSeleccionado.nombre,
@@ -247,24 +274,32 @@ export const NuevoServicio: React.FC<NuevoServicioProps> = ({
     };
 
     // Check duplicates if not editing
-    const duplicate = checkDuplicate(servicioData, servicioEdicion?.nroServicio);
+    const duplicate = checkDuplicate(servicioData, nro);
     if (duplicate && !servicioEdicion) {
       setDuplicadoDetectado(duplicate);
-      setPendingSaveData(servicioData);
+      setPendingSaveData({ data: servicioData, guardarYNuevo });
       setShowDuplicadoModal(true);
       return;
     }
 
     // Save directly
-    onGuardar(servicioData);
+    const res = await onGuardar(servicioData, guardarYNuevo);
+    if (guardarYNuevo && res !== false) {
+      resetForm();
+    }
   };
 
-  const handleConfirmarDuplicado = () => {
+  const handleConfirmarDuplicado = async () => {
     if (pendingSaveData) {
-      onGuardar({ ...pendingSaveData, forzarGuardar: true });
+      const dataToSave = pendingSaveData.data || pendingSaveData;
+      const isGuardarYNuevo = pendingSaveData.guardarYNuevo || false;
       setShowDuplicadoModal(false);
       setPendingSaveData(null);
       setDuplicadoDetectado(null);
+      const res = await onGuardar({ ...dataToSave, forzarGuardar: true }, isGuardarYNuevo);
+      if (isGuardarYNuevo && res !== false) {
+        resetForm();
+      }
     }
   };
 
@@ -603,41 +638,80 @@ export const NuevoServicio: React.FC<NuevoServicioProps> = ({
           </div>
         </div>
 
-        {/* 7. BOTÓN PRINCIPAL THUMB-FRIENDLY */}
+        {/* 7. BOTONES PRINCIPALES THUMB-FRIENDLY */}
         <div className="pt-2 flex flex-col sm:flex-row gap-3">
-          {servicioEdicion && (
-            <button
-              type="button"
-              onClick={onCancelarEdicion}
-              disabled={isSaving}
-              className="h-13 px-5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl transition flex items-center justify-center gap-2 order-2 sm:order-1"
-            >
-              <RotateCcw className="w-4 h-4" />
-              Cancelar Edición
-            </button>
-          )}
+          {servicioEdicion ? (
+            <>
+              <button
+                type="button"
+                onClick={onCancelarEdicion}
+                disabled={isSaving}
+                className="h-13 px-5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl transition flex items-center justify-center gap-2 order-2 sm:order-1 cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Cancelar Edición
+              </button>
 
-          <button
-            type="submit"
-            disabled={isSaving}
-            className={`flex-1 h-13 px-6 font-extrabold text-sm sm:text-base rounded-xl shadow-md transition-all flex items-center justify-center gap-2.5 order-1 sm:order-2 ${
-              isSaving
-                ? 'bg-blue-400 text-white cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white shadow-blue-600/30'
-            }`}
-          >
-            {isSaving ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Guardando en Google Sheets...</span>
-              </>
-            ) : (
-              <>
-                <Save className="w-5 h-5" />
-                <span>{servicioEdicion ? 'ACTUALIZAR SERVICIO' : 'GUARDAR SERVICIO'}</span>
-              </>
-            )}
-          </button>
+              <button
+                type="button"
+                onClick={(e) => handleSubmit(e, false)}
+                disabled={isSaving}
+                className="flex-1 h-13 px-6 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-extrabold text-sm sm:text-base rounded-xl shadow-md shadow-blue-600/30 transition-all flex items-center justify-center gap-2.5 order-1 sm:order-2 cursor-pointer disabled:opacity-50"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Actualizando en Google Sheets...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-5 h-5" />
+                    <span>ACTUALIZAR SERVICIO</span>
+                  </>
+                )}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={(e) => handleSubmit(e, false)}
+                disabled={isSaving}
+                className="flex-1 h-13 px-6 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-extrabold text-sm sm:text-base rounded-xl shadow-md shadow-blue-600/30 transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-50"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Guardando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-5 h-5" />
+                    <span>GUARDAR SERVICIO</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={(e) => handleSubmit(e, true)}
+                disabled={isSaving}
+                className="flex-1 h-13 px-6 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-extrabold text-sm sm:text-base rounded-xl shadow-md shadow-emerald-600/30 transition-all flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-50"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Guardando...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-5 h-5" />
+                    <span>GUARDAR Y NUEVO</span>
+                  </>
+                )}
+              </button>
+            </>
+          )}
         </div>
       </form>
 

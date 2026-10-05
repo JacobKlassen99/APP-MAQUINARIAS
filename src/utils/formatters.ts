@@ -70,20 +70,80 @@ export function getTodayDateString(): string {
 }
 
 /**
+ * Limpia y extrae el valor numérico puro del horómetro,
+ * eliminando definitivamente cualquier conversión no deseada a Date, GMT o hora de Bolivia.
+ * Si Google Sheets convirtió un número como 4021.2 en fecha "Mon Feb 01 4021",
+ * recupera el número original con precisión.
+ */
+export function limpiarValorHorometro(val: any, horas?: number, inicioBase?: string): string {
+  if (val === null || val === undefined) return '';
+  let str = String(val).trim();
+  if (!str) return '';
+
+  // Si ya es un número limpio (ej: "1250", "1258.5", "1258,5")
+  if (/^-?\d+([.,]\d+)?$/.test(str)) {
+    return str.replace(',', '.');
+  }
+
+  // Si contiene GMT, hora de Bolivia o formato de fecha JavaScript
+  if (str.includes('GMT') || str.includes('hora de') || /^[A-Za-z]{3}\s+[A-Za-z]{3}\s+\d+/.test(str)) {
+    // Si tenemos inicioBase numérico y horas conocidas > 0, calcular fin exacto: fin = inicio + horas
+    if (horas !== undefined && horas !== null && Number(horas) > 0 && inicioBase) {
+      const baseNum = parseFloat(String(inicioBase).replace(',', '.'));
+      if (!isNaN(baseNum)) {
+        const calculado = Math.round((baseNum + Number(horas)) * 100) / 100;
+        return String(calculado);
+      }
+    }
+
+    // Intentar extraer año y mes si Google Sheets convirtió un número decimal a Fecha (ej. 4021 Feb -> 4021.2)
+    const match = str.match(/([A-Za-z]{3})\s+(\d{1,2})\s+(\d{3,5})/);
+    if (match) {
+      const monthStr = match[1];
+      const year = match[3];
+      const monthMap: Record<string, number> = {
+        Jan: 1, Ene: 1, Feb: 2, Mar: 3, Apr: 4, Abr: 4, May: 5, Jun: 6,
+        Jul: 7, Aug: 8, Ago: 8, Sep: 9, Set: 9, Oct: 10, Nov: 11, Dec: 12, Dic: 12
+      };
+      const monthNum = monthMap[monthStr];
+      if (monthNum && monthNum > 0) {
+        return `${year}.${monthNum}`;
+      }
+      return year;
+    }
+
+    // Si hay un número de 3 o más dígitos (como el año/horómetro)
+    const yearMatch = str.match(/\b([1-9]\d{2,4})\b/);
+    if (yearMatch) {
+      return yearMatch[1];
+    }
+
+    return '';
+  }
+
+  return str;
+}
+
+/**
  * Calculates hours based on Tipo (Horómetro vs Horario)
  */
-export function calcularHoras(tipo: TipoHora, inicio: string, fin: string): number {
+export function calcularHoras(tipo: TipoHora | string, inicio: string, fin: string): number {
   if (!inicio || !fin) return 0;
 
-  if (tipo === 'Horómetro') {
-    const valInicio = parseFloat(inicio.replace(',', '.'));
-    const valFin = parseFloat(fin.replace(',', '.'));
+  const t = String(tipo || '').toLowerCase();
+  const isHorario = t.includes('horar') || (String(inicio).includes(':') && String(fin).includes(':'));
+
+  if (!isHorario) {
+    const cleanIni = limpiarValorHorometro(inicio);
+    const cleanFin = limpiarValorHorometro(fin);
+    const valInicio = parseFloat(cleanIni.replace(',', '.'));
+    const valFin = parseFloat(cleanFin.replace(',', '.'));
     if (isNaN(valInicio) || isNaN(valFin)) return 0;
     const diff = valFin - valInicio;
     return diff > 0 ? Math.round(diff * 100) / 100 : 0;
   }
 
-  if (tipo === 'Horario') {
+  if (isHorario) {
     const parseTime = (timeStr: string) => {
       const parts = timeStr.trim().split(':');
       if (parts.length < 2) return null;
