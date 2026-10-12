@@ -42,6 +42,7 @@ import { ComprobanteModal } from './components/ComprobanteModal';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { MotoniveladoraIcon } from './components/MotoniveladoraIcon';
 import { PantallaLogin } from './components/PantallaLogin';
+import { PWAUpdateNotification } from './components/PWAUpdateNotification';
 
 export default function App() {
   // Autenticación de acceso a nivel de usuario (validación en GAS / Biometría WebAuthn)
@@ -51,6 +52,7 @@ export default function App() {
   const [isOpenMobile, setIsOpenMobile] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
 
   // Real Database State from Google Sheets
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -145,6 +147,9 @@ export default function App() {
   const handleSelectTab = (tab: TabType) => {
     document.body.classList.remove('comprobante-modal-open');
     setActiveTab(tab);
+    if (tab !== 'nuevo') {
+      setHasUnsavedChanges(false);
+    }
     if (tab === 'reportes') {
       cargarServiciosReportes();
     } else if (tab === 'dashboard') {
@@ -372,6 +377,9 @@ export default function App() {
           </div>
         </header>
 
+        {/* PWA Update Notification Banner */}
+        <PWAUpdateNotification hasUnsavedChanges={hasUnsavedChanges} />
+
         {/* Real Connection Status Banner if error */}
         {connectionError && (
           <div className="bg-amber-50 border-b border-amber-200 px-4 sm:px-6 py-3.5 text-xs sm:text-sm text-amber-900 no-print animate-in fade-in">
@@ -430,6 +438,7 @@ export default function App() {
                 setActiveTab('registros');
               }}
               checkDuplicate={checkDuplicate}
+              onDirtyChange={setHasUnsavedChanges}
             />
           )}
 

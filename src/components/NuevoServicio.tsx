@@ -42,6 +42,7 @@ interface NuevoServicioProps {
   onGuardar: (servicio: Servicio & { forzarGuardar?: boolean }, guardarYNuevo?: boolean) => Promise<boolean | void> | void;
   onCancelarEdicion?: () => void;
   checkDuplicate: (data: Partial<Servicio>, excludeNro?: string) => Servicio | null;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 export const NuevoServicio: React.FC<NuevoServicioProps> = ({
@@ -54,6 +55,7 @@ export const NuevoServicio: React.FC<NuevoServicioProps> = ({
   onGuardar,
   onCancelarEdicion,
   checkDuplicate,
+  onDirtyChange,
 }) => {
   // Form fields
   const [fecha, setFecha] = useState<string>(getTodayDateString());
@@ -125,6 +127,13 @@ export const NuevoServicio: React.FC<NuevoServicioProps> = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Report form dirty state for PWA update checks
+  useEffect(() => {
+    if (!onDirtyChange) return;
+    const isDirty = !!clienteSeleccionado || operador !== '' || maquinaria !== '' || implemento !== '' || inicio !== '' || fin !== '' || cantidad > 0 || precio > 0;
+    onDirtyChange(isDirty);
+  }, [clienteSeleccionado, operador, maquinaria, implemento, inicio, fin, cantidad, precio, onDirtyChange]);
 
   // Filter machines and implementos
   const maquinasUnicas = Array.from(new Set(maquinariaList.map(m => m.maquinaria)));
