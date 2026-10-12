@@ -42,6 +42,17 @@ export const APPS_SCRIPT_URL = (ENV_URL && typeof ENV_URL === 'string' && ENV_UR
   ? ENV_URL.trim()
   : DEFAULT_URL;
 
+let cachedAdminPass: string | null = null;
+
+function checkAdminAuthError(err: any) {
+  const msg = String(err?.message || err?.mensaje || err || '').toLowerCase();
+  if (msg.includes('contraseña') || msg.includes('admin') || msg.includes('autorizaci') || msg.includes('vencida') || msg.includes('incorrecta') || msg.includes('unauthorized') || msg.includes('token')) {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('control_maquinaria_token_admin');
+    }
+  }
+}
+
 function isGasMode(): boolean {
   return typeof window !== 'undefined' && typeof window.google?.script?.run !== 'undefined';
 }
@@ -648,38 +659,93 @@ export const gasService = {
     }
   },
 
+  getAdminToken(): string | null {
+    return typeof window !== 'undefined' ? localStorage.getItem('control_maquinaria_token_admin') : null;
+  },
+
+  hasValidAdminToken(): boolean {
+    return !!this.getAdminToken();
+  },
+
   /**
-   * Valida la contraseña de Administrador para autorizar operaciones sensibles (editar/eliminar).
-   * La validación se ejecuta de forma segura en Google Apps Script.
+   * Emite y guarda de forma persistente la credencial administrativa tokenAdmin
    */
-  async validarAdmin(passwordAdmin: string): Promise<{ ok: boolean; exito?: boolean; mensaje?: string }> {
+  async emitirCredencialAdmin(password: string): Promise<{ ok: boolean; exito?: boolean; tokenAdmin?: string; mensaje?: string }> {
     if (isGasMode()) {
-      const res = await callGasNative<any>('validarAdmin', passwordAdmin);
-      return {
-        ok: !!(res?.ok || res?.exito),
-        exito: !!(res?.ok || res?.exito),
-        mensaje: res?.mensaje || (res?.ok ? 'Autorización administrativa concedida' : 'Contraseña de administrador incorrecta.')
-      };
+      try {
+        const res = await callGasNative<any>('emitirCredencialAdmin', password);
+        const token = res?.tokenAdmin || res?.token || res?.datos?.tokenAdmin;
+        if (token && typeof window !== 'undefined') {
+          localStorage.setItem('control_maquinaria_token_admin', token);
+        }
+        const ok = !!(res?.ok || res?.exito || token);
+        return {
+          ok,
+          exito: ok,
+          tokenAdmin: token,
+          mensaje: res?.mensaje || (ok ? 'Autorización administrativa concedida' : 'Contraseña de administrador incorrecta.')
+        };
+      } catch (err: any) {
+        checkAdminAuthError(err);
+        return {
+          ok: false,
+          exito: false,
+          mensaje: err.message || 'Error al conectar con el servidor.'
+        };
+      }
     }
 
     try {
-      const res = await callGasPost<any>('validarAdmin', { password: passwordAdmin, adminPass: passwordAdmin }, {
-        password: passwordAdmin,
-        adminPass: passwordAdmin,
-        passwordAdmin: passwordAdmin
+      const res = await callGasPost<any>('emitirCredencialAdmin', { password, adminPass: password }, {
+        password,
+        adminPass: password
       });
+      const token = res?.tokenAdmin || res?.token || res?.datos?.tokenAdmin;
+      if (token && typeof window !== 'undefined') {
+        localStorage.setItem('control_maquinaria_token_admin', token);
+      }
+      const ok = !!(res?.ok || res?.exito || token);
       return {
-        ok: !!(res?.ok || res?.exito),
-        exito: !!(res?.ok || res?.exito),
-        mensaje: res?.mensaje || (res?.ok ? 'Autorización administrativa concedida' : 'Contraseña de administrador incorrecta.')
+        ok,
+        exito: ok,
+        tokenAdmin: token,
+        mensaje: res?.mensaje || (ok ? 'Autorización administrativa concedida' : 'Contraseña de administrador incorrecta.')
       };
     } catch (err: any) {
+      checkAdminAuthError(err);
       return {
         ok: false,
         exito: false,
-        mensaje: err.message || 'Error de conexión con el servidor.'
+        mensaje: err.message || 'Error al conectar con el servidor.'
       };
     }
+  },
+
+  /**
+   * Revoca la credencial administrativa del dispositivo
+   */
+  async revocarCredencialAdmin(): Promise<{ ok: boolean; mensaje?: string }> {
+    const token = this.getAdminToken();
+    try {
+      if (isGasMode()) {
+        await callGasNative<any>('revocarCredencialAdmin', token);
+      } else if (token) {
+        await callGasPost<any>('revocarCredencialAdmin', { tokenAdmin: token }, { tokenAdmin: token });
+      }
+    } catch {
+      // Ignorar errores de red al revocar
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('control_maquinaria_token_admin');
+    }
+    return { ok: true, mensaje: 'Autorización administrativa revocada de este dispositivo.' };
+  },
+
+  /**
+   * Valida la contraseña de Administrador emitiendo un tokenAdmin persistente.
+   */
+  async validarAdmin(passwordAdmin: string): Promise<{ ok: boolean; exito?: boolean; mensaje?: string; tokenAdmin?: string }> {
+    return this.emitirCredencialAdmin(passwordAdmin);
   },
 
   /**
@@ -693,6 +759,7 @@ export const gasService = {
     nroServicio?: string;
     fila?: number;
   }> {
+    const tokenToUse = adminPass || this.getAdminToken();
     const filaNum = typeof datos.fila === 'number' 
       ? datos.fila 
       : (typeof datos.filaIndex === 'number' 
@@ -723,48 +790,57 @@ export const gasService = {
       precio: Number(datos.precio) || 0,
       total: Number(datos.total) || 0,
     };
-    if (adminPass) {
-      datosLimpios.adminPass = adminPass;
-      datosLimpios.adminPassword = adminPass;
+    if (tokenToUse) {
+      datosLimpios.tokenAdmin = tokenToUse;
+      datosLimpios.token = tokenToUse;
+      datosLimpios.adminPass = tokenToUse;
+      datosLimpios.adminPassword = tokenToUse;
     }
 
-    if (isGasMode()) {
-      const res = await callGasNative<any>('editarServicio', datosLimpios);
+    try {
+      if (isGasMode()) {
+        const res = await callGasNative<any>('editarServicio', datosLimpios);
+        return {
+          exito: !!(res?.exito || res?.ok),
+          ok: !!(res?.exito || res?.ok),
+          mensaje: res?.mensaje || 'Servicio actualizado correctamente.',
+          numero: res?.numero || nro,
+          nroServicio: res?.nroServicio || res?.numero || nro,
+          fila: res?.fila || filaNum,
+        };
+      }
+
+      const extraProps: any = {};
+      if (typeof filaNum === 'number') {
+        extraProps.fila = filaNum;
+        extraProps.filaIndex = filaNum;
+      }
+      if (nro) {
+        extraProps.numero = nro;
+        extraProps.nroServicio = nro;
+        extraProps.id = nro;
+      }
+      if (tokenToUse) {
+        extraProps.tokenAdmin = tokenToUse;
+        extraProps.token = tokenToUse;
+        extraProps.adminPass = tokenToUse;
+        extraProps.adminPassword = tokenToUse;
+      }
+
+      const res = await callGasPost<any>('editarServicio', datosLimpios, extraProps);
+      const num = res?.numero || res?.nroServicio || nro;
       return {
         exito: !!(res?.exito || res?.ok),
         ok: !!(res?.exito || res?.ok),
         mensaje: res?.mensaje || 'Servicio actualizado correctamente.',
-        numero: res?.numero || nro,
-        nroServicio: res?.nroServicio || res?.numero || nro,
+        numero: num,
+        nroServicio: num,
         fila: res?.fila || filaNum,
       };
+    } catch (err: any) {
+      checkAdminAuthError(err);
+      throw err;
     }
-
-    const extraProps: any = {};
-    if (typeof filaNum === 'number') {
-      extraProps.fila = filaNum;
-      extraProps.filaIndex = filaNum;
-    }
-    if (nro) {
-      extraProps.numero = nro;
-      extraProps.nroServicio = nro;
-      extraProps.id = nro;
-    }
-    if (adminPass) {
-      extraProps.adminPass = adminPass;
-      extraProps.adminPassword = adminPass;
-    }
-
-    const res = await callGasPost<any>('editarServicio', datosLimpios, extraProps);
-    const num = res?.numero || res?.nroServicio || nro;
-    return {
-      exito: !!(res?.exito || res?.ok),
-      ok: !!(res?.exito || res?.ok),
-      mensaje: res?.mensaje || 'Servicio actualizado correctamente.',
-      numero: num,
-      nroServicio: num,
-      fila: res?.fila || filaNum,
-    };
   },
 
   /**
@@ -775,52 +851,62 @@ export const gasService = {
     ok?: boolean;
     mensaje: string;
   }> {
-    if (isGasMode()) {
-      const res = await callGasNative<any>('eliminarServicio', fila || nroServicio, adminPass);
+    const tokenToUse = adminPass || this.getAdminToken();
+    try {
+      if (isGasMode()) {
+        const res = await callGasNative<any>('eliminarServicio', fila || nroServicio, tokenToUse);
+        return {
+          exito: !!(res?.exito || res?.ok),
+          ok: !!(res?.exito || res?.ok),
+          mensaje: res?.mensaje || 'Servicio eliminado correctamente de Google Sheets.',
+        };
+      }
+
+      let targetFila = fila;
+      if (typeof targetFila !== 'number') {
+        try {
+          const servs = await callGasGet<any[]>('servicios');
+          const found = servs.find((s: any) => s.numero === nroServicio || s.nroServicio === nroServicio);
+          if (found && typeof found.fila === 'number') {
+            targetFila = found.fila;
+          }
+        } catch {
+          // Continuar
+        }
+      }
+
+      const extraProps: any = {
+        numero: nroServicio,
+        nroServicio: nroServicio,
+      };
+      if (typeof targetFila === 'number') {
+        extraProps.fila = targetFila;
+      }
+      if (tokenToUse) {
+        extraProps.tokenAdmin = tokenToUse;
+        extraProps.token = tokenToUse;
+        extraProps.adminPass = tokenToUse;
+        extraProps.adminPassword = tokenToUse;
+      }
+
+      const res = await callGasPost<any>('eliminarServicio', {
+        fila: targetFila,
+        numero: nroServicio,
+        nroServicio: nroServicio,
+        tokenAdmin: tokenToUse,
+        token: tokenToUse,
+        adminPass: tokenToUse,
+      }, extraProps);
+
       return {
         exito: !!(res?.exito || res?.ok),
         ok: !!(res?.exito || res?.ok),
         mensaje: res?.mensaje || 'Servicio eliminado correctamente de Google Sheets.',
       };
+    } catch (err: any) {
+      checkAdminAuthError(err);
+      throw err;
     }
-
-    let targetFila = fila;
-    if (typeof targetFila !== 'number') {
-      try {
-        const servs = await callGasGet<any[]>('servicios');
-        const found = servs.find((s: any) => s.numero === nroServicio || s.nroServicio === nroServicio);
-        if (found && typeof found.fila === 'number') {
-          targetFila = found.fila;
-        }
-      } catch {
-        // Continuar
-      }
-    }
-
-    const extraProps: any = {
-      numero: nroServicio,
-      nroServicio: nroServicio,
-    };
-    if (typeof targetFila === 'number') {
-      extraProps.fila = targetFila;
-    }
-    if (adminPass) {
-      extraProps.adminPass = adminPass;
-      extraProps.adminPassword = adminPass;
-    }
-
-    const res = await callGasPost<any>('eliminarServicio', {
-      fila: targetFila,
-      numero: nroServicio,
-      nroServicio: nroServicio,
-      adminPass: adminPass,
-    }, extraProps);
-
-    return {
-      exito: !!(res?.exito || res?.ok),
-      ok: !!(res?.exito || res?.ok),
-      mensaje: res?.mensaje || 'Servicio eliminado correctamente de Google Sheets.',
-    };
   },
 
   /**
@@ -943,61 +1029,87 @@ export const gasService = {
    * (Si es edición de cliente existente, requiere adminPass)
    */
   async guardarCliente(cliente: Cliente, oldCuenta?: string, adminPass?: string): Promise<{ exito: boolean; mensaje: string }> {
+    const tokenToUse = adminPass || this.getAdminToken();
     const payload: any = {
       cuenta: String(cliente.cuenta || '').trim(),
       nombre: String(cliente.nombre || '').trim(),
     };
     if (oldCuenta) payload.oldCuenta = String(oldCuenta).trim();
-    if (adminPass) {
-      payload.adminPass = adminPass;
-      payload.adminPassword = adminPass;
+    if (tokenToUse) {
+      payload.tokenAdmin = tokenToUse;
+      payload.token = tokenToUse;
+      payload.adminPass = tokenToUse;
+      payload.adminPassword = tokenToUse;
     }
 
-    if (isGasMode()) {
-      return callGasNative('guardarCliente', cliente, oldCuenta, adminPass);
-    }
+    try {
+      if (isGasMode()) {
+        const res = await callGasNative('guardarCliente', cliente, oldCuenta, tokenToUse);
+        return {
+          exito: !!(res?.exito || res?.ok !== false),
+          mensaje: res?.mensaje || 'Cliente guardado correctamente en Google Sheets.',
+        };
+      }
 
-    const res = await callGasPost<any>('guardarCliente', payload, payload);
-    return {
-      exito: !!(res?.exito || res?.ok !== false),
-      mensaje: res?.mensaje || 'Cliente guardado correctamente en Google Sheets.',
-    };
+      const res = await callGasPost<any>('guardarCliente', payload, payload);
+      return {
+        exito: !!(res?.exito || res?.ok !== false),
+        mensaje: res?.mensaje || 'Cliente guardado correctamente en Google Sheets.',
+      };
+    } catch (err: any) {
+      checkAdminAuthError(err);
+      throw err;
+    }
   },
 
   /**
    * Elimina un cliente de Google Sheets (requiere adminPass)
    */
   async eliminarCliente(cuenta: string, fila?: number, adminPass?: string): Promise<{ exito: boolean; mensaje: string }> {
-    if (isGasMode()) {
-      return callGasNative('eliminarCliente', cuenta, adminPass);
+    const tokenToUse = adminPass || this.getAdminToken();
+    try {
+      if (isGasMode()) {
+        const res = await callGasNative('eliminarCliente', cuenta, tokenToUse);
+        return {
+          exito: !!(res?.exito || res?.ok !== false),
+          mensaje: res?.mensaje || 'Cliente eliminado correctamente de Google Sheets.',
+        };
+      }
+
+      let targetFila = fila;
+      if (typeof targetFila !== 'number') {
+        try {
+          const cls = await callGasGet<any[]>('clientes');
+          const found = cls.find((c: any) => String(c.cuenta).trim() === String(cuenta).trim());
+          if (found && typeof found.fila === 'number') targetFila = found.fila;
+        } catch {}
+      }
+
+      const extraProps: any = { cuenta: String(cuenta) };
+      if (typeof targetFila === 'number') extraProps.fila = targetFila;
+      if (tokenToUse) {
+        extraProps.tokenAdmin = tokenToUse;
+        extraProps.token = tokenToUse;
+        extraProps.adminPass = tokenToUse;
+        extraProps.adminPassword = tokenToUse;
+      }
+
+      const res = await callGasPost<any>('eliminarCliente', {
+        cuenta: String(cuenta),
+        fila: targetFila,
+        tokenAdmin: tokenToUse,
+        token: tokenToUse,
+        adminPass: tokenToUse,
+      }, extraProps);
+
+      return {
+        exito: !!(res?.exito || res?.ok !== false),
+        mensaje: res?.mensaje || 'Cliente eliminado correctamente de Google Sheets.',
+      };
+    } catch (err: any) {
+      checkAdminAuthError(err);
+      throw err;
     }
-
-    let targetFila = fila;
-    if (typeof targetFila !== 'number') {
-      try {
-        const cls = await callGasGet<any[]>('clientes');
-        const found = cls.find((c: any) => String(c.cuenta).trim() === String(cuenta).trim());
-        if (found && typeof found.fila === 'number') targetFila = found.fila;
-      } catch {}
-    }
-
-    const extraProps: any = { cuenta: String(cuenta) };
-    if (typeof targetFila === 'number') extraProps.fila = targetFila;
-    if (adminPass) {
-      extraProps.adminPass = adminPass;
-      extraProps.adminPassword = adminPass;
-    }
-
-    const res = await callGasPost<any>('eliminarCliente', {
-      cuenta: String(cuenta),
-      fila: targetFila,
-      adminPass: adminPass,
-    }, extraProps);
-
-    return {
-      exito: !!(res?.exito || res?.ok !== false),
-      mensaje: res?.mensaje || 'Cliente eliminado correctamente de Google Sheets.',
-    };
   },
 
   /**
@@ -1005,60 +1117,86 @@ export const gasService = {
    * (Si es edición de operador existente, requiere adminPass)
    */
   async guardarOperador(operador: string, oldNombre?: string, adminPass?: string): Promise<{ exito: boolean; mensaje: string }> {
+    const tokenToUse = adminPass || this.getAdminToken();
     const nombre = String(operador || '').trim();
     const payload: any = { nombre, operador: nombre };
     if (oldNombre) payload.oldNombre = String(oldNombre).trim();
-    if (adminPass) {
-      payload.adminPass = adminPass;
-      payload.adminPassword = adminPass;
+    if (tokenToUse) {
+      payload.tokenAdmin = tokenToUse;
+      payload.token = tokenToUse;
+      payload.adminPass = tokenToUse;
+      payload.adminPassword = tokenToUse;
     }
 
-    if (isGasMode()) {
-      return callGasNative('guardarOperador', operador, oldNombre, adminPass);
-    }
+    try {
+      if (isGasMode()) {
+        const res = await callGasNative('guardarOperador', operador, oldNombre, tokenToUse);
+        return {
+          exito: !!(res?.exito || res?.ok !== false),
+          mensaje: res?.mensaje || 'Operador guardado correctamente en Google Sheets.',
+        };
+      }
 
-    const res = await callGasPost<any>('guardarOperador', payload, payload);
-    return {
-      exito: !!(res?.exito || res?.ok !== false),
-      mensaje: res?.mensaje || 'Operador guardado correctamente en Google Sheets.',
-    };
+      const res = await callGasPost<any>('guardarOperador', payload, payload);
+      return {
+        exito: !!(res?.exito || res?.ok !== false),
+        mensaje: res?.mensaje || 'Operador guardado correctamente en Google Sheets.',
+      };
+    } catch (err: any) {
+      checkAdminAuthError(err);
+      throw err;
+    }
   },
 
   /**
    * Elimina un operador de Google Sheets (requiere adminPass)
    */
   async eliminarOperador(operador: string, fila?: number, adminPass?: string): Promise<{ exito: boolean; mensaje: string }> {
-    if (isGasMode()) {
-      return callGasNative('eliminarOperador', operador, adminPass);
+    const tokenToUse = adminPass || this.getAdminToken();
+    try {
+      if (isGasMode()) {
+        const res = await callGasNative('eliminarOperador', operador, tokenToUse);
+        return {
+          exito: !!(res?.exito || res?.ok !== false),
+          mensaje: res?.mensaje || 'Operador eliminado correctamente de Google Sheets.',
+        };
+      }
+
+      let targetFila = fila;
+      if (typeof targetFila !== 'number') {
+        try {
+          const ops = await callGasGet<any[]>('operadores');
+          const found = ops.find((o: any) => (o.nombre || o.operador) === operador);
+          if (found && typeof found.fila === 'number') targetFila = found.fila;
+        } catch {}
+      }
+
+      const extraProps: any = { nombre: operador, operador: operador };
+      if (typeof targetFila === 'number') extraProps.fila = targetFila;
+      if (tokenToUse) {
+        extraProps.tokenAdmin = tokenToUse;
+        extraProps.token = tokenToUse;
+        extraProps.adminPass = tokenToUse;
+        extraProps.adminPassword = tokenToUse;
+      }
+
+      const res = await callGasPost<any>('eliminarOperador', {
+        nombre: operador,
+        operador: operador,
+        fila: targetFila,
+        tokenAdmin: tokenToUse,
+        token: tokenToUse,
+        adminPass: tokenToUse,
+      }, extraProps);
+
+      return {
+        exito: !!(res?.exito || res?.ok !== false),
+        mensaje: res?.mensaje || 'Operador eliminado correctamente de Google Sheets.',
+      };
+    } catch (err: any) {
+      checkAdminAuthError(err);
+      throw err;
     }
-
-    let targetFila = fila;
-    if (typeof targetFila !== 'number') {
-      try {
-        const ops = await callGasGet<any[]>('operadores');
-        const found = ops.find((o: any) => (o.nombre || o.operador) === operador);
-        if (found && typeof found.fila === 'number') targetFila = found.fila;
-      } catch {}
-    }
-
-    const extraProps: any = { nombre: operador, operador: operador };
-    if (typeof targetFila === 'number') extraProps.fila = targetFila;
-    if (adminPass) {
-      extraProps.adminPass = adminPass;
-      extraProps.adminPassword = adminPass;
-    }
-
-    const res = await callGasPost<any>('eliminarOperador', {
-      nombre: operador,
-      operador: operador,
-      fila: targetFila,
-      adminPass: adminPass,
-    }, extraProps);
-
-    return {
-      exito: !!(res?.exito || res?.ok !== false),
-      mensaje: res?.mensaje || 'Operador eliminado correctamente de Google Sheets.',
-    };
   },
 
   /**
@@ -1066,6 +1204,7 @@ export const gasService = {
    * (Si es edición de maquinaria existente, requiere adminPass)
    */
   async guardarMaquinaria(item: MaquinariaConfig, oldMaq?: string, oldImp?: string, adminPass?: string): Promise<{ exito: boolean; mensaje: string }> {
+    const tokenToUse = adminPass || this.getAdminToken();
     const datos: any = {
       maquinaria: item.maquinaria,
       implemento: item.implemento || '',
@@ -1074,57 +1213,82 @@ export const gasService = {
     };
     if (oldMaq) datos.oldMaq = oldMaq;
     if (oldImp !== undefined) datos.oldImp = oldImp;
-    if (adminPass) {
-      datos.adminPass = adminPass;
-      datos.adminPassword = adminPass;
+    if (tokenToUse) {
+      datos.tokenAdmin = tokenToUse;
+      datos.token = tokenToUse;
+      datos.adminPass = tokenToUse;
+      datos.adminPassword = tokenToUse;
     }
 
-    if (isGasMode()) {
-      return callGasNative('guardarMaquinaria', item, oldMaq, oldImp, adminPass);
-    }
+    try {
+      if (isGasMode()) {
+        const res = await callGasNative('guardarMaquinaria', item, oldMaq, oldImp, tokenToUse);
+        return {
+          exito: !!(res?.exito || res?.ok !== false),
+          mensaje: res?.mensaje || 'Maquinaria guardada correctamente en Google Sheets.',
+        };
+      }
 
-    const res = await callGasPost<any>('guardarMaquinaria', datos, datos);
-    return {
-      exito: !!(res?.exito || res?.ok !== false),
-      mensaje: res?.mensaje || 'Maquinaria guardada correctamente en Google Sheets.',
-    };
+      const res = await callGasPost<any>('guardarMaquinaria', datos, datos);
+      return {
+        exito: !!(res?.exito || res?.ok !== false),
+        mensaje: res?.mensaje || 'Maquinaria guardada correctamente en Google Sheets.',
+      };
+    } catch (err: any) {
+      checkAdminAuthError(err);
+      throw err;
+    }
   },
 
   /**
    * Elimina configuración de maquinaria de Google Sheets (requiere adminPass)
    */
   async eliminarMaquinaria(maquinaria: string, implemento: string, fila?: number, adminPass?: string): Promise<{ exito: boolean; mensaje: string }> {
-    if (isGasMode()) {
-      return callGasNative('eliminarMaquinaria', maquinaria, implemento, adminPass);
+    const tokenToUse = adminPass || this.getAdminToken();
+    try {
+      if (isGasMode()) {
+        const res = await callGasNative('eliminarMaquinaria', maquinaria, implemento, tokenToUse);
+        return {
+          exito: !!(res?.exito || res?.ok !== false),
+          mensaje: res?.mensaje || 'Maquinaria eliminada correctamente de Google Sheets.',
+        };
+      }
+
+      let targetFila = fila;
+      if (typeof targetFila !== 'number') {
+        try {
+          const maqs = await callGasGet<any[]>('maquinaria');
+          const found = maqs.find((m: any) => m.maquinaria === maquinaria && (m.implemento || '') === (implemento || ''));
+          if (found && typeof found.fila === 'number') targetFila = found.fila;
+        } catch {}
+      }
+
+      const extraProps: any = { maquinaria, implemento };
+      if (typeof targetFila === 'number') extraProps.fila = targetFila;
+      if (tokenToUse) {
+        extraProps.tokenAdmin = tokenToUse;
+        extraProps.token = tokenToUse;
+        extraProps.adminPass = tokenToUse;
+        extraProps.adminPassword = tokenToUse;
+      }
+
+      const res = await callGasPost<any>('eliminarMaquinaria', {
+        maquinaria,
+        implemento,
+        fila: targetFila,
+        tokenAdmin: tokenToUse,
+        token: tokenToUse,
+        adminPass: tokenToUse,
+      }, extraProps);
+
+      return {
+        exito: !!(res?.exito || res?.ok !== false),
+        mensaje: res?.mensaje || 'Maquinaria eliminada correctamente de Google Sheets.',
+      };
+    } catch (err: any) {
+      checkAdminAuthError(err);
+      throw err;
     }
-
-    let targetFila = fila;
-    if (typeof targetFila !== 'number') {
-      try {
-        const maqs = await callGasGet<any[]>('maquinaria');
-        const found = maqs.find((m: any) => m.maquinaria === maquinaria && (m.implemento || '') === (implemento || ''));
-        if (found && typeof found.fila === 'number') targetFila = found.fila;
-      } catch {}
-    }
-
-    const extraProps: any = { maquinaria, implemento };
-    if (typeof targetFila === 'number') extraProps.fila = targetFila;
-    if (adminPass) {
-      extraProps.adminPass = adminPass;
-      extraProps.adminPassword = adminPass;
-    }
-
-    const res = await callGasPost<any>('eliminarMaquinaria', {
-      maquinaria,
-      implemento,
-      fila: targetFila,
-      adminPass: adminPass,
-    }, extraProps);
-
-    return {
-      exito: !!(res?.exito || res?.ok !== false),
-      mensaje: res?.mensaje || 'Maquinaria eliminada correctamente de Google Sheets.',
-    };
   },
 
   /**

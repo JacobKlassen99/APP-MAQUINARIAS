@@ -53,10 +53,8 @@ export const Registros: React.FC<RegistrosProps> = ({
   const [isLoadingLocal, setIsLoadingLocal] = useState<boolean>(true);
   const [errorLocal, setErrorLocal] = useState<string | null>(null);
 
-  // Modal confirmación eliminar
   const [servicioAEliminar, setServicioAEliminar] = useState<Servicio | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
-  const [adminPassEliminar, setAdminPassEliminar] = useState<string>('');
 
   // Modal de autorización administrativa
   const [adminAuthModal, setAdminAuthModal] = useState<{
@@ -170,12 +168,16 @@ export const Registros: React.FC<RegistrosProps> = ({
   // Flujo para EDITAR:
   // Pulsar Editar -> solicitar Contraseña de administrador -> validar en Google Apps Script -> si es correcta, abrir edición.
   const handleSolicitarEditar = (s: Servicio) => {
+    if (gasService.hasValidAdminToken()) {
+      onEditar(s, gasService.getAdminToken() || undefined);
+      return;
+    }
     setAdminAuthModal({
       isOpen: true,
       titulo: 'Editar Servicio',
       accionDescripcion: `Ingrese la contraseña de Administrador para autorizar la edición del servicio ${s.nroServicio}.`,
-      onAuthorized: (adminPass: string) => {
-        onEditar(s, adminPass);
+      onAuthorized: () => {
+        onEditar(s, gasService.getAdminToken() || undefined);
       }
     });
   };
@@ -183,12 +185,15 @@ export const Registros: React.FC<RegistrosProps> = ({
   // Flujo para ELIMINAR:
   // Pulsar Eliminar -> solicitar Contraseña de administrador -> validar en Google Apps Script -> si es correcta, mostrar confirmación existente: "¿Eliminar este servicio?" -> Confirmar -> eliminar.
   const handleSolicitarEliminar = (s: Servicio) => {
+    if (gasService.hasValidAdminToken()) {
+      setServicioAEliminar(s);
+      return;
+    }
     setAdminAuthModal({
       isOpen: true,
       titulo: 'Eliminar Servicio',
       accionDescripcion: `Ingrese la contraseña de Administrador para autorizar la eliminación del servicio ${s.nroServicio}.`,
-      onAuthorized: (adminPass: string) => {
-        setAdminPassEliminar(adminPass);
+      onAuthorized: () => {
         setServicioAEliminar(s);
       }
     });
@@ -199,9 +204,8 @@ export const Registros: React.FC<RegistrosProps> = ({
     if (!servicioAEliminar) return;
     setIsDeleting(true);
     try {
-      await onEliminar(servicioAEliminar.nroServicio, servicioAEliminar.fila, adminPassEliminar);
+      await onEliminar(servicioAEliminar.nroServicio, servicioAEliminar.fila, gasService.getAdminToken() || undefined);
       setServicioAEliminar(null);
-      setAdminPassEliminar('');
       // Reload current page, or previous page if current became empty
       const targetPage = (serviciosPaginados.length === 1 && paginaActual > 1) ? paginaActual - 1 : paginaActual;
       setPaginaActual(targetPage);
@@ -760,7 +764,6 @@ export const Registros: React.FC<RegistrosProps> = ({
                 type="button"
                 onClick={() => {
                   setServicioAEliminar(null);
-                  setAdminPassEliminar('');
                 }}
                 disabled={isDeleting}
                 className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"

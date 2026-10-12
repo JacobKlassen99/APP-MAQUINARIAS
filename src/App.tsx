@@ -310,7 +310,9 @@ export default function App() {
         isOpenMobile={isOpenMobile}
         onCloseMobile={() => setIsOpenMobile(false)}
         serviciosCount={stats.totalServicios || servicios.length}
-        onCerrarSesion={() => setIsAuthenticated(false)}
+        onCerrarSesion={() => {
+          setIsAuthenticated(false);
+        }}
       />
 
       {/* Main Body Area */}

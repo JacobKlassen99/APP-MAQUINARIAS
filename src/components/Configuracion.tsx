@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Cliente, Operador, MaquinariaConfig, UnidadMedida } from '../types';
 import { formatCurrency, coincideCliente } from '../utils/formatters';
+import { gasService } from '../services/gasService';
 import { ModalAdminAuth } from './ModalAdminAuth';
 
 interface ConfiguracionProps {
@@ -68,8 +69,6 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
     accionDescripcion: '',
     onAuthorized: () => {},
   });
-  const [currentAdminPass, setCurrentAdminPass] = useState<string>('');
-
   // State for delete confirmation modal (Cliente, Operador, Maquinaria)
   const [itemAEliminar, setItemAEliminar] = useState<
     | { tipo: 'cliente'; cuenta: string; nombre: string; fila?: number }
@@ -83,15 +82,15 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
     if (!itemAEliminar) return;
     setIsEliminando(true);
     try {
+      const tokenAdmin = gasService.getAdminToken() || undefined;
       if (itemAEliminar.tipo === 'cliente') {
-        await onEliminarCliente(itemAEliminar.cuenta, itemAEliminar.fila, currentAdminPass);
+        await onEliminarCliente(itemAEliminar.cuenta, itemAEliminar.fila, tokenAdmin);
       } else if (itemAEliminar.tipo === 'operador') {
-        await onEliminarOperador(itemAEliminar.operador, itemAEliminar.fila, currentAdminPass);
+        await onEliminarOperador(itemAEliminar.operador, itemAEliminar.fila, tokenAdmin);
       } else if (itemAEliminar.tipo === 'maquinaria') {
-        await onEliminarMaquinaria(itemAEliminar.maquinaria, itemAEliminar.implemento, itemAEliminar.fila, currentAdminPass);
+        await onEliminarMaquinaria(itemAEliminar.maquinaria, itemAEliminar.implemento, itemAEliminar.fila, tokenAdmin);
       }
       setItemAEliminar(null);
-      setCurrentAdminPass('');
     } catch (err) {
       console.error('Error al ejecutar eliminación:', err);
     } finally {
@@ -129,7 +128,6 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
   const openNuevoModal = (type: 'cliente' | 'operador' | 'maquinaria') => {
     setModalType(type);
     setEditItem(null);
-    setCurrentAdminPass('');
     setFormCuenta('');
     setFormNombre('');
     setFormOperador('');
@@ -141,12 +139,18 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
 
   // Solicitar contraseña de administrador antes de EDITAR Cliente
   const handleSolicitarEditarCliente = (c: Cliente) => {
+    if (gasService.hasValidAdminToken()) {
+      setEditItem({ tipo: 'cliente', oldCuenta: c.cuenta, cuenta: c.cuenta, nombre: c.nombre });
+      setFormCuenta(c.cuenta);
+      setFormNombre(c.nombre);
+      setModalType('cliente');
+      return;
+    }
     setAdminAuthModal({
       isOpen: true,
       titulo: 'Editar Cliente',
       accionDescripcion: `Ingrese la contraseña de Administrador para editar los datos del cliente "${c.nombre}".`,
-      onAuthorized: (adminPass) => {
-        setCurrentAdminPass(adminPass);
+      onAuthorized: () => {
         setEditItem({ tipo: 'cliente', oldCuenta: c.cuenta, cuenta: c.cuenta, nombre: c.nombre });
         setFormCuenta(c.cuenta);
         setFormNombre(c.nombre);
@@ -157,12 +161,15 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
 
   // Solicitar contraseña de administrador antes de ELIMINAR Cliente
   const handleSolicitarEliminarCliente = (c: Cliente) => {
+    if (gasService.hasValidAdminToken()) {
+      setItemAEliminar({ tipo: 'cliente', cuenta: c.cuenta, nombre: c.nombre, fila: c.fila });
+      return;
+    }
     setAdminAuthModal({
       isOpen: true,
       titulo: 'Eliminar Cliente',
       accionDescripcion: `Ingrese la contraseña de Administrador para eliminar al cliente "${c.nombre}".`,
-      onAuthorized: (adminPass) => {
-        setCurrentAdminPass(adminPass);
+      onAuthorized: () => {
         setItemAEliminar({ tipo: 'cliente', cuenta: c.cuenta, nombre: c.nombre, fila: c.fila });
       }
     });
@@ -170,12 +177,17 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
 
   // Solicitar contraseña de administrador antes de EDITAR Operador
   const handleSolicitarEditarOperador = (o: Operador) => {
+    if (gasService.hasValidAdminToken()) {
+      setEditItem({ tipo: 'operador', oldNombre: o.operador, operador: o.operador });
+      setFormOperador(o.operador);
+      setModalType('operador');
+      return;
+    }
     setAdminAuthModal({
       isOpen: true,
       titulo: 'Editar Operador',
       accionDescripcion: `Ingrese la contraseña de Administrador para editar al operador "${o.operador}".`,
-      onAuthorized: (adminPass) => {
-        setCurrentAdminPass(adminPass);
+      onAuthorized: () => {
         setEditItem({ tipo: 'operador', oldNombre: o.operador, operador: o.operador });
         setFormOperador(o.operador);
         setModalType('operador');
@@ -185,12 +197,15 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
 
   // Solicitar contraseña de administrador antes de ELIMINAR Operador
   const handleSolicitarEliminarOperador = (o: Operador) => {
+    if (gasService.hasValidAdminToken()) {
+      setItemAEliminar({ tipo: 'operador', operador: o.operador, fila: o.fila });
+      return;
+    }
     setAdminAuthModal({
       isOpen: true,
       titulo: 'Eliminar Operador',
       accionDescripcion: `Ingrese la contraseña de Administrador para eliminar al operador "${o.operador}".`,
-      onAuthorized: (adminPass) => {
-        setCurrentAdminPass(adminPass);
+      onAuthorized: () => {
         setItemAEliminar({ tipo: 'operador', operador: o.operador, fila: o.fila });
       }
     });
@@ -198,12 +213,25 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
 
   // Solicitar contraseña de administrador antes de EDITAR Maquinaria/Precio
   const handleSolicitarEditarMaquinaria = (m: MaquinariaConfig) => {
+    if (gasService.hasValidAdminToken()) {
+      setEditItem({ 
+        tipo: 'maquinaria', 
+        oldMaq: m.maquinaria, 
+        oldImp: m.implemento || '',
+        ...m 
+      });
+      setFormMaquinaria(m.maquinaria);
+      setFormImplemento(m.implemento || '');
+      setFormUnidad(m.unidad || 'Hora');
+      setFormPrecio(m.precio || 0);
+      setModalType('maquinaria');
+      return;
+    }
     setAdminAuthModal({
       isOpen: true,
       titulo: 'Editar Maquinaria / Tarifa',
       accionDescripcion: `Ingrese la contraseña de Administrador para editar la tarifa de "${m.maquinaria}".`,
-      onAuthorized: (adminPass) => {
-        setCurrentAdminPass(adminPass);
+      onAuthorized: () => {
         setEditItem({ 
           tipo: 'maquinaria', 
           oldMaq: m.maquinaria, 
@@ -221,12 +249,15 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
 
   // Solicitar contraseña de administrador antes de ELIMINAR Maquinaria/Precio
   const handleSolicitarEliminarMaquinaria = (m: MaquinariaConfig) => {
+    if (gasService.hasValidAdminToken()) {
+      setItemAEliminar({ tipo: 'maquinaria', maquinaria: m.maquinaria, implemento: m.implemento, fila: m.fila });
+      return;
+    }
     setAdminAuthModal({
       isOpen: true,
       titulo: 'Eliminar Maquinaria / Tarifa',
       accionDescripcion: `Ingrese la contraseña de Administrador para eliminar la tarifa de "${m.maquinaria}".`,
-      onAuthorized: (adminPass) => {
-        setCurrentAdminPass(adminPass);
+      onAuthorized: () => {
         setItemAEliminar({ tipo: 'maquinaria', maquinaria: m.maquinaria, implemento: m.implemento, fila: m.fila });
       }
     });
@@ -237,14 +268,14 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
     if (!formCuenta || !formNombre) return;
     setIsProcessing(true);
     try {
+      const tokenAdmin = gasService.getAdminToken() || undefined;
       if (editItem && editItem.tipo === 'cliente') {
-        await onGuardarCliente({ cuenta: formCuenta.trim(), nombre: formNombre.trim() }, editItem.oldCuenta, currentAdminPass);
+        await onGuardarCliente({ cuenta: formCuenta.trim(), nombre: formNombre.trim() }, editItem.oldCuenta, tokenAdmin);
       } else {
         await onGuardarCliente({ cuenta: formCuenta.trim(), nombre: formNombre.trim() });
       }
       setModalType(null);
       setEditItem(null);
-      setCurrentAdminPass('');
     } finally {
       setIsProcessing(false);
     }
@@ -255,14 +286,14 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
     if (!formOperador.trim()) return;
     setIsProcessing(true);
     try {
+      const tokenAdmin = gasService.getAdminToken() || undefined;
       if (editItem && editItem.tipo === 'operador') {
-        await onGuardarOperador(formOperador.trim(), editItem.oldNombre, currentAdminPass);
+        await onGuardarOperador(formOperador.trim(), editItem.oldNombre, tokenAdmin);
       } else {
         await onGuardarOperador(formOperador.trim());
       }
       setModalType(null);
       setEditItem(null);
-      setCurrentAdminPass('');
     } finally {
       setIsProcessing(false);
     }
@@ -273,6 +304,7 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
     if (!formMaquinaria.trim()) return;
     setIsProcessing(true);
     try {
+      const tokenAdmin = gasService.getAdminToken() || undefined;
       const itemData: MaquinariaConfig = {
         maquinaria: formMaquinaria.trim(),
         implemento: formImplemento.trim(),
@@ -280,13 +312,12 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
         unidad: formUnidad
       };
       if (editItem && editItem.tipo === 'maquinaria') {
-        await onGuardarMaquinaria(itemData, editItem.oldMaq, editItem.oldImp, currentAdminPass);
+        await onGuardarMaquinaria(itemData, editItem.oldMaq, editItem.oldImp, tokenAdmin);
       } else {
         await onGuardarMaquinaria(itemData);
       }
       setModalType(null);
       setEditItem(null);
-      setCurrentAdminPass('');
     } finally {
       setIsProcessing(false);
     }
@@ -647,6 +678,49 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
               {syncMsg}
             </div>
           )}
+
+          {/* Tarjeta de Seguridad y Autorización Admin del Dispositivo */}
+          <div className="border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4 bg-slate-50/60 mt-6">
+            <div>
+              <h3 className="font-extrabold text-slate-900 text-sm sm:text-base">Autorización Administrativa del Dispositivo</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Gestión de la credencial persistente de administrador para operaciones protegidas.
+              </p>
+            </div>
+
+            <div className="p-4 bg-white border border-slate-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+              <div>
+                <span className="text-xs font-bold uppercase text-slate-500">Estado de Autorización:</span>
+                <div className="flex items-center gap-2 mt-1">
+                  {gasService.hasValidAdminToken() ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-extrabold rounded-full">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      Autorizado en este dispositivo
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-200 text-slate-700 text-xs font-extrabold rounded-full">
+                      <AlertCircle className="w-3.5 h-3.5 text-slate-500" />
+                      Sin autorización activa
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {gasService.hasValidAdminToken() && (
+                <button
+                  onClick={async () => {
+                    await gasService.revocarCredencialAdmin();
+                    setSyncMsg('Autorización administrativa revocada correctamente de este dispositivo.');
+                    setTimeout(() => setSyncMsg(null), 4000);
+                  }}
+                  className="h-11 px-4 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Revocar Autorización</span>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -663,8 +737,7 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
                 onClick={() => {
                   setModalType(null);
                   setEditItem(null);
-                  setCurrentAdminPass('');
-                }} 
+                              }} 
                 className="text-slate-400 hover:text-slate-700"
               >
                 <X className="w-5 h-5" />
@@ -705,8 +778,7 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
                 onClick={() => {
                   setModalType(null);
                   setEditItem(null);
-                  setCurrentAdminPass('');
-                }}
+                              }}
                 className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
               >
                 Cancelar
@@ -736,8 +808,7 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
                 onClick={() => {
                   setModalType(null);
                   setEditItem(null);
-                  setCurrentAdminPass('');
-                }} 
+                              }} 
                 className="text-slate-400 hover:text-slate-700"
               >
                 <X className="w-5 h-5" />
@@ -764,8 +835,7 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
                 onClick={() => {
                   setModalType(null);
                   setEditItem(null);
-                  setCurrentAdminPass('');
-                }}
+                              }}
                 className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
               >
                 Cancelar
@@ -795,8 +865,7 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
                 onClick={() => {
                   setModalType(null);
                   setEditItem(null);
-                  setCurrentAdminPass('');
-                }} 
+                              }} 
                 className="text-slate-400 hover:text-slate-700"
               >
                 <X className="w-5 h-5" />
@@ -869,8 +938,7 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
                 onClick={() => {
                   setModalType(null);
                   setEditItem(null);
-                  setCurrentAdminPass('');
-                }}
+                              }}
                 className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
               >
                 Cancelar
@@ -927,8 +995,7 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
                 disabled={isEliminando}
                 onClick={() => {
                   setItemAEliminar(null);
-                  setCurrentAdminPass('');
-                }}
+                              }}
                 className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer disabled:opacity-50"
               >
                 Cancelar
