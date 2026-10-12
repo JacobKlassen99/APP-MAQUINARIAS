@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Cliente, Operador, MaquinariaConfig, UnidadMedida } from '../types';
 import { formatCurrency, coincideCliente } from '../utils/formatters';
+import { ModalAdminAuth } from './ModalAdminAuth';
 
 interface ConfiguracionProps {
   clientes: Cliente[];
@@ -23,12 +24,12 @@ interface ConfiguracionProps {
   maquinaria: MaquinariaConfig[];
   serviciosCount: number;
   ultimoNumero: string;
-  onGuardarCliente: (cliente: Cliente) => Promise<any>;
-  onEliminarCliente: (cuenta: string, fila?: number) => Promise<any>;
-  onGuardarOperador: (operador: string) => Promise<any>;
-  onEliminarOperador: (operador: string, fila?: number) => Promise<any>;
-  onGuardarMaquinaria: (item: MaquinariaConfig) => Promise<any>;
-  onEliminarMaquinaria: (maquinaria: string, implemento: string, fila?: number) => Promise<any>;
+  onGuardarCliente: (cliente: Cliente, oldCuenta?: string, adminPass?: string) => Promise<any>;
+  onEliminarCliente: (cuenta: string, fila?: number, adminPass?: string) => Promise<any>;
+  onGuardarOperador: (operador: string, oldNombre?: string, adminPass?: string) => Promise<any>;
+  onEliminarOperador: (operador: string, fila?: number, adminPass?: string) => Promise<any>;
+  onGuardarMaquinaria: (item: MaquinariaConfig, oldMaq?: string, oldImp?: string, adminPass?: string) => Promise<any>;
+  onEliminarMaquinaria: (maquinaria: string, implemento: string, fila?: number, adminPass?: string) => Promise<any>;
   onSincronizarNumero: () => Promise<any>;
   onRefreshAll: () => Promise<any>;
 }
@@ -55,6 +56,20 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
 
+  // Modal de autorización administrativa (Administrador = siempre contraseña Admin)
+  const [adminAuthModal, setAdminAuthModal] = useState<{
+    isOpen: boolean;
+    titulo: string;
+    accionDescripcion: string;
+    onAuthorized: (adminPass: string) => void;
+  }>({
+    isOpen: false,
+    titulo: '',
+    accionDescripcion: '',
+    onAuthorized: () => {},
+  });
+  const [currentAdminPass, setCurrentAdminPass] = useState<string>('');
+
   // State for delete confirmation modal (Cliente, Operador, Maquinaria)
   const [itemAEliminar, setItemAEliminar] = useState<
     | { tipo: 'cliente'; cuenta: string; nombre: string; fila?: number }
@@ -69,15 +84,16 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
     setIsEliminando(true);
     try {
       if (itemAEliminar.tipo === 'cliente') {
-        await onEliminarCliente(itemAEliminar.cuenta, itemAEliminar.fila);
+        await onEliminarCliente(itemAEliminar.cuenta, itemAEliminar.fila, currentAdminPass);
       } else if (itemAEliminar.tipo === 'operador') {
-        await onEliminarOperador(itemAEliminar.operador, itemAEliminar.fila);
+        await onEliminarOperador(itemAEliminar.operador, itemAEliminar.fila, currentAdminPass);
       } else if (itemAEliminar.tipo === 'maquinaria') {
-        await onEliminarMaquinaria(itemAEliminar.maquinaria, itemAEliminar.implemento, itemAEliminar.fila);
+        await onEliminarMaquinaria(itemAEliminar.maquinaria, itemAEliminar.implemento, itemAEliminar.fila, currentAdminPass);
       }
       setItemAEliminar(null);
+      setCurrentAdminPass('');
     } catch (err) {
-      console.error('Error al ejecutar eliminación en Google Sheets:', err);
+      console.error('Error al ejecutar eliminación:', err);
     } finally {
       setIsEliminando(false);
     }
@@ -113,6 +129,7 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
   const openNuevoModal = (type: 'cliente' | 'operador' | 'maquinaria') => {
     setModalType(type);
     setEditItem(null);
+    setCurrentAdminPass('');
     setFormCuenta('');
     setFormNombre('');
     setFormOperador('');
@@ -122,13 +139,112 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
     setFormUnidad('Hora');
   };
 
+  // Solicitar contraseña de administrador antes de EDITAR Cliente
+  const handleSolicitarEditarCliente = (c: Cliente) => {
+    setAdminAuthModal({
+      isOpen: true,
+      titulo: 'Editar Cliente',
+      accionDescripcion: `Ingrese la contraseña de Administrador para editar los datos del cliente "${c.nombre}".`,
+      onAuthorized: (adminPass) => {
+        setCurrentAdminPass(adminPass);
+        setEditItem({ tipo: 'cliente', oldCuenta: c.cuenta, cuenta: c.cuenta, nombre: c.nombre });
+        setFormCuenta(c.cuenta);
+        setFormNombre(c.nombre);
+        setModalType('cliente');
+      }
+    });
+  };
+
+  // Solicitar contraseña de administrador antes de ELIMINAR Cliente
+  const handleSolicitarEliminarCliente = (c: Cliente) => {
+    setAdminAuthModal({
+      isOpen: true,
+      titulo: 'Eliminar Cliente',
+      accionDescripcion: `Ingrese la contraseña de Administrador para eliminar al cliente "${c.nombre}".`,
+      onAuthorized: (adminPass) => {
+        setCurrentAdminPass(adminPass);
+        setItemAEliminar({ tipo: 'cliente', cuenta: c.cuenta, nombre: c.nombre, fila: c.fila });
+      }
+    });
+  };
+
+  // Solicitar contraseña de administrador antes de EDITAR Operador
+  const handleSolicitarEditarOperador = (o: Operador) => {
+    setAdminAuthModal({
+      isOpen: true,
+      titulo: 'Editar Operador',
+      accionDescripcion: `Ingrese la contraseña de Administrador para editar al operador "${o.operador}".`,
+      onAuthorized: (adminPass) => {
+        setCurrentAdminPass(adminPass);
+        setEditItem({ tipo: 'operador', oldNombre: o.operador, operador: o.operador });
+        setFormOperador(o.operador);
+        setModalType('operador');
+      }
+    });
+  };
+
+  // Solicitar contraseña de administrador antes de ELIMINAR Operador
+  const handleSolicitarEliminarOperador = (o: Operador) => {
+    setAdminAuthModal({
+      isOpen: true,
+      titulo: 'Eliminar Operador',
+      accionDescripcion: `Ingrese la contraseña de Administrador para eliminar al operador "${o.operador}".`,
+      onAuthorized: (adminPass) => {
+        setCurrentAdminPass(adminPass);
+        setItemAEliminar({ tipo: 'operador', operador: o.operador, fila: o.fila });
+      }
+    });
+  };
+
+  // Solicitar contraseña de administrador antes de EDITAR Maquinaria/Precio
+  const handleSolicitarEditarMaquinaria = (m: MaquinariaConfig) => {
+    setAdminAuthModal({
+      isOpen: true,
+      titulo: 'Editar Maquinaria / Tarifa',
+      accionDescripcion: `Ingrese la contraseña de Administrador para editar la tarifa de "${m.maquinaria}".`,
+      onAuthorized: (adminPass) => {
+        setCurrentAdminPass(adminPass);
+        setEditItem({ 
+          tipo: 'maquinaria', 
+          oldMaq: m.maquinaria, 
+          oldImp: m.implemento || '',
+          ...m 
+        });
+        setFormMaquinaria(m.maquinaria);
+        setFormImplemento(m.implemento || '');
+        setFormUnidad(m.unidad || 'Hora');
+        setFormPrecio(m.precio || 0);
+        setModalType('maquinaria');
+      }
+    });
+  };
+
+  // Solicitar contraseña de administrador antes de ELIMINAR Maquinaria/Precio
+  const handleSolicitarEliminarMaquinaria = (m: MaquinariaConfig) => {
+    setAdminAuthModal({
+      isOpen: true,
+      titulo: 'Eliminar Maquinaria / Tarifa',
+      accionDescripcion: `Ingrese la contraseña de Administrador para eliminar la tarifa de "${m.maquinaria}".`,
+      onAuthorized: (adminPass) => {
+        setCurrentAdminPass(adminPass);
+        setItemAEliminar({ tipo: 'maquinaria', maquinaria: m.maquinaria, implemento: m.implemento, fila: m.fila });
+      }
+    });
+  };
+
   const handleSaveCliente = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formCuenta || !formNombre) return;
     setIsProcessing(true);
     try {
-      await onGuardarCliente({ cuenta: formCuenta.trim(), nombre: formNombre.trim() });
+      if (editItem && editItem.tipo === 'cliente') {
+        await onGuardarCliente({ cuenta: formCuenta.trim(), nombre: formNombre.trim() }, editItem.oldCuenta, currentAdminPass);
+      } else {
+        await onGuardarCliente({ cuenta: formCuenta.trim(), nombre: formNombre.trim() });
+      }
       setModalType(null);
+      setEditItem(null);
+      setCurrentAdminPass('');
     } finally {
       setIsProcessing(false);
     }
@@ -139,8 +255,14 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
     if (!formOperador.trim()) return;
     setIsProcessing(true);
     try {
-      await onGuardarOperador(formOperador.trim());
+      if (editItem && editItem.tipo === 'operador') {
+        await onGuardarOperador(formOperador.trim(), editItem.oldNombre, currentAdminPass);
+      } else {
+        await onGuardarOperador(formOperador.trim());
+      }
       setModalType(null);
+      setEditItem(null);
+      setCurrentAdminPass('');
     } finally {
       setIsProcessing(false);
     }
@@ -151,13 +273,20 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
     if (!formMaquinaria.trim()) return;
     setIsProcessing(true);
     try {
-      await onGuardarMaquinaria({
+      const itemData: MaquinariaConfig = {
         maquinaria: formMaquinaria.trim(),
         implemento: formImplemento.trim(),
         precio: Number(formPrecio) || 0,
         unidad: formUnidad
-      });
+      };
+      if (editItem && editItem.tipo === 'maquinaria') {
+        await onGuardarMaquinaria(itemData, editItem.oldMaq, editItem.oldImp, currentAdminPass);
+      } else {
+        await onGuardarMaquinaria(itemData);
+      }
       setModalType(null);
+      setEditItem(null);
+      setCurrentAdminPass('');
     } finally {
       setIsProcessing(false);
     }
@@ -300,13 +429,22 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
                         {c.nombre}
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <button
-                          onClick={() => setItemAEliminar({ tipo: 'cliente', cuenta: c.cuenta, nombre: c.nombre, fila: c.fila })}
-                          className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition cursor-pointer"
-                          title="Eliminar cliente"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleSolicitarEditarCliente(c)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                            title="Editar cliente"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleSolicitarEliminarCliente(c)}
+                            className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                            title="Eliminar cliente"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -363,13 +501,22 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
                         {o.operador}
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <button
-                          onClick={() => setItemAEliminar({ tipo: 'operador', operador: o.operador, fila: o.fila })}
-                          className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition cursor-pointer"
-                          title="Eliminar operador"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleSolicitarEditarOperador(o)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                            title="Editar operador"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleSolicitarEliminarOperador(o)}
+                            className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                            title="Eliminar operador"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -438,13 +585,22 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
                         {formatCurrency(m.precio)}
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <button
-                          onClick={() => setItemAEliminar({ tipo: 'maquinaria', maquinaria: m.maquinaria, implemento: m.implemento, fila: m.fila })}
-                          className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition cursor-pointer"
-                          title="Eliminar registro"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleSolicitarEditarMaquinaria(m)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                            title="Editar maquinaria o tarifa"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleSolicitarEliminarMaquinaria(m)}
+                            className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                            title="Eliminar registro"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -472,7 +628,7 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
                 {ultimoNumero}
               </div>
               <span className="text-xs text-slate-500 mt-1 block">
-                Total de servicios en la hoja: <strong>{serviciosCount}</strong>
+                Total de servicios en el sistema: <strong>{serviciosCount}</strong>
               </span>
             </div>
 
@@ -494,13 +650,23 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
         </div>
       )}
 
-      {/* Modal Agregar Cliente */}
+      {/* Modal Agregar o Editar Cliente */}
       {modalType === 'cliente' && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <form onSubmit={handleSaveCliente} className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in duration-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-extrabold text-slate-900 text-base">Nuevo Cliente</h3>
-              <button type="button" onClick={() => setModalType(null)} className="text-slate-400 hover:text-slate-700">
+              <h3 className="font-extrabold text-slate-900 text-base">
+                {editItem ? 'Editar Cliente' : 'Nuevo Cliente'}
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setModalType(null);
+                  setEditItem(null);
+                  setCurrentAdminPass('');
+                }} 
+                className="text-slate-400 hover:text-slate-700"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -536,7 +702,11 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
             <div className="flex items-center justify-end gap-2.5 pt-2">
               <button
                 type="button"
-                onClick={() => setModalType(null)}
+                onClick={() => {
+                  setModalType(null);
+                  setEditItem(null);
+                  setCurrentAdminPass('');
+                }}
                 className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
               >
                 Cancelar
@@ -546,20 +716,30 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
                 disabled={isProcessing}
                 className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs"
               >
-                Guardar Cliente
+                {editItem ? 'Guardar Cambios' : 'Guardar Cliente'}
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Modal Agregar Operador */}
+      {/* Modal Agregar o Editar Operador */}
       {modalType === 'operador' && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <form onSubmit={handleSaveOperador} className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in duration-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-extrabold text-slate-900 text-base">Nuevo Operador</h3>
-              <button type="button" onClick={() => setModalType(null)} className="text-slate-400 hover:text-slate-700">
+              <h3 className="font-extrabold text-slate-900 text-base">
+                {editItem ? 'Editar Operador' : 'Nuevo Operador'}
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setModalType(null);
+                  setEditItem(null);
+                  setCurrentAdminPass('');
+                }} 
+                className="text-slate-400 hover:text-slate-700"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -581,7 +761,11 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
             <div className="flex items-center justify-end gap-2.5 pt-2">
               <button
                 type="button"
-                onClick={() => setModalType(null)}
+                onClick={() => {
+                  setModalType(null);
+                  setEditItem(null);
+                  setCurrentAdminPass('');
+                }}
                 className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
               >
                 Cancelar
@@ -591,20 +775,30 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
                 disabled={isProcessing}
                 className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs"
               >
-                Guardar Operador
+                {editItem ? 'Guardar Cambios' : 'Guardar Operador'}
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Modal Agregar Maquinaria */}
+      {/* Modal Agregar o Editar Maquinaria */}
       {modalType === 'maquinaria' && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <form onSubmit={handleSaveMaquinaria} className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in duration-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-extrabold text-slate-900 text-base">Nueva Maquinaria / Tarifa</h3>
-              <button type="button" onClick={() => setModalType(null)} className="text-slate-400 hover:text-slate-700">
+              <h3 className="font-extrabold text-slate-900 text-base">
+                {editItem ? 'Editar Maquinaria / Tarifa' : 'Nueva Maquinaria / Tarifa'}
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setModalType(null);
+                  setEditItem(null);
+                  setCurrentAdminPass('');
+                }} 
+                className="text-slate-400 hover:text-slate-700"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -672,7 +866,11 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
             <div className="flex items-center justify-end gap-2.5 pt-2">
               <button
                 type="button"
-                onClick={() => setModalType(null)}
+                onClick={() => {
+                  setModalType(null);
+                  setEditItem(null);
+                  setCurrentAdminPass('');
+                }}
                 className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
               >
                 Cancelar
@@ -682,12 +880,13 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
                 disabled={isProcessing}
                 className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs"
               >
-                Guardar Tarifa
+                {editItem ? 'Guardar Cambios' : 'Guardar Tarifa'}
               </button>
             </div>
           </form>
         </div>
       )}
+
       {/* Modal Confirmación de Eliminación */}
       {itemAEliminar && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -705,18 +904,18 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
               <p className="text-xs text-slate-500 mt-2">
                 {itemAEliminar.tipo === 'cliente' && (
                   <>
-                    Se eliminará el cliente <strong className="text-slate-800">{itemAEliminar.nombre}</strong> (Cuenta #{itemAEliminar.cuenta}) de la hoja de Google Sheets.
+                    Se eliminará permanentemente al cliente <strong className="text-slate-800">{itemAEliminar.nombre}</strong> (Cuenta #{itemAEliminar.cuenta}).
                   </>
                 )}
                 {itemAEliminar.tipo === 'operador' && (
                   <>
-                    Se eliminará al operador <strong className="text-slate-800">{itemAEliminar.operador}</strong> de la hoja de Google Sheets.
+                    Se eliminará permanentemente al operador <strong className="text-slate-800">{itemAEliminar.operador}</strong>.
                   </>
                 )}
                 {itemAEliminar.tipo === 'maquinaria' && (
                   <>
-                    Se eliminará la tarifa de <strong className="text-slate-800">{itemAEliminar.maquinaria}</strong>
-                    {itemAEliminar.implemento ? ` (${itemAEliminar.implemento})` : ''} de la hoja de Google Sheets.
+                    Se eliminará permanentemente la tarifa de <strong className="text-slate-800">{itemAEliminar.maquinaria}</strong>
+                    {itemAEliminar.implemento ? ` (${itemAEliminar.implemento})` : ''}.
                   </>
                 )}
               </p>
@@ -726,7 +925,10 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
               <button
                 type="button"
                 disabled={isEliminando}
-                onClick={() => setItemAEliminar(null)}
+                onClick={() => {
+                  setItemAEliminar(null);
+                  setCurrentAdminPass('');
+                }}
                 className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer disabled:opacity-50"
               >
                 Cancelar
@@ -744,6 +946,17 @@ export const Configuracion: React.FC<ConfiguracionProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal de Validación de Administrador */}
+      <ModalAdminAuth
+        isOpen={adminAuthModal.isOpen}
+        titulo={adminAuthModal.titulo}
+        accionDescripcion={adminAuthModal.accionDescripcion}
+        onClose={() => setAdminAuthModal(prev => ({ ...prev, isOpen: false }))}
+        onSuccess={(adminPass) => {
+          adminAuthModal.onAuthorized(adminPass);
+        }}
+      />
     </div>
   );
 };

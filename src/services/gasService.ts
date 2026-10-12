@@ -603,9 +603,89 @@ export const gasService = {
   },
 
   /**
-   * Edita un servicio existente en Google Sheets
+   * Obtiene la versión de acceso actual desde el backend (cambia si cambia la contraseña en Google Sheets)
    */
-  async editarServicio(datos: any): Promise<{
+  async obtenerVersionAcceso(): Promise<string> {
+    if (isGasMode()) {
+      const res = await callGasNative<any>('obtenerVersionAcceso');
+      return String(res?.versionAcceso || res || '');
+    }
+    try {
+      const res = await callGasGet<any>('obtenerVersionAcceso');
+      return String(res?.versionAcceso || res?.datos?.versionAcceso || res || '');
+    } catch {
+      return '';
+    }
+  },
+
+  /**
+   * Valida la contraseña de usuario para permitir ingresar a la aplicación.
+   * La validación se ejecuta de forma segura en Google Apps Script.
+   */
+  async validarAccesoUsuario(password: string): Promise<{ ok: boolean; exito?: boolean; mensaje?: string }> {
+    if (isGasMode()) {
+      const res = await callGasNative<any>('validarAccesoUsuario', password);
+      return {
+        ok: !!(res?.ok || res?.exito),
+        exito: !!(res?.ok || res?.exito),
+        mensaje: res?.mensaje || (res?.ok ? 'Acceso autorizado' : 'Contraseña incorrecta.')
+      };
+    }
+
+    try {
+      const res = await callGasPost<any>('validarAccesoUsuario', { password }, { password, pass: password });
+      return {
+        ok: !!(res?.ok || res?.exito),
+        exito: !!(res?.ok || res?.exito),
+        mensaje: res?.mensaje || (res?.ok ? 'Acceso autorizado' : 'Contraseña incorrecta.')
+      };
+    } catch (err: any) {
+      return {
+        ok: false,
+        exito: false,
+        mensaje: err.message || 'Error de conexión con el servidor.'
+      };
+    }
+  },
+
+  /**
+   * Valida la contraseña de Administrador para autorizar operaciones sensibles (editar/eliminar).
+   * La validación se ejecuta de forma segura en Google Apps Script.
+   */
+  async validarAdmin(passwordAdmin: string): Promise<{ ok: boolean; exito?: boolean; mensaje?: string }> {
+    if (isGasMode()) {
+      const res = await callGasNative<any>('validarAdmin', passwordAdmin);
+      return {
+        ok: !!(res?.ok || res?.exito),
+        exito: !!(res?.ok || res?.exito),
+        mensaje: res?.mensaje || (res?.ok ? 'Autorización administrativa concedida' : 'Contraseña de administrador incorrecta.')
+      };
+    }
+
+    try {
+      const res = await callGasPost<any>('validarAdmin', { password: passwordAdmin, adminPass: passwordAdmin }, {
+        password: passwordAdmin,
+        adminPass: passwordAdmin,
+        passwordAdmin: passwordAdmin
+      });
+      return {
+        ok: !!(res?.ok || res?.exito),
+        exito: !!(res?.ok || res?.exito),
+        mensaje: res?.mensaje || (res?.ok ? 'Autorización administrativa concedida' : 'Contraseña de administrador incorrecta.')
+      };
+    } catch (err: any) {
+      return {
+        ok: false,
+        exito: false,
+        mensaje: err.message || 'Error de conexión con el servidor.'
+      };
+    }
+  },
+
+  /**
+   * Edita un servicio existente en Google Sheets (requiere autorización admin)
+   */
+  async editarServicio(datos: any, adminPass?: string): Promise<{
     exito: boolean;
     ok?: boolean;
     mensaje: string;
@@ -623,7 +703,7 @@ export const gasService = {
     const cleanIni = limpiarValorHorometro(datos.inicio, Number(datos.horas));
     const cleanFin = limpiarValorHorometro(datos.fin, Number(datos.horas), cleanIni);
 
-    const datosLimpios = {
+    const datosLimpios: any = {
       fila: filaNum,
       numero: nro,
       nroServicio: nro,
@@ -643,6 +723,10 @@ export const gasService = {
       precio: Number(datos.precio) || 0,
       total: Number(datos.total) || 0,
     };
+    if (adminPass) {
+      datosLimpios.adminPass = adminPass;
+      datosLimpios.adminPassword = adminPass;
+    }
 
     if (isGasMode()) {
       const res = await callGasNative<any>('editarServicio', datosLimpios);
@@ -666,6 +750,10 @@ export const gasService = {
       extraProps.nroServicio = nro;
       extraProps.id = nro;
     }
+    if (adminPass) {
+      extraProps.adminPass = adminPass;
+      extraProps.adminPassword = adminPass;
+    }
 
     const res = await callGasPost<any>('editarServicio', datosLimpios, extraProps);
     const num = res?.numero || res?.nroServicio || nro;
@@ -680,15 +768,15 @@ export const gasService = {
   },
 
   /**
-   * Elimina un servicio en Google Sheets
+   * Elimina un servicio en Google Sheets (requiere autorización admin)
    */
-  async eliminarServicio(nroServicio: string, fila?: number): Promise<{
+  async eliminarServicio(nroServicio: string, fila?: number, adminPass?: string): Promise<{
     exito: boolean;
     ok?: boolean;
     mensaje: string;
   }> {
     if (isGasMode()) {
-      const res = await callGasNative<any>('eliminarServicio', fila || nroServicio);
+      const res = await callGasNative<any>('eliminarServicio', fila || nroServicio, adminPass);
       return {
         exito: !!(res?.exito || res?.ok),
         ok: !!(res?.exito || res?.ok),
@@ -716,16 +804,21 @@ export const gasService = {
     if (typeof targetFila === 'number') {
       extraProps.fila = targetFila;
     }
+    if (adminPass) {
+      extraProps.adminPass = adminPass;
+      extraProps.adminPassword = adminPass;
+    }
 
     const res = await callGasPost<any>('eliminarServicio', {
       fila: targetFila,
       numero: nroServicio,
       nroServicio: nroServicio,
+      adminPass: adminPass,
     }, extraProps);
 
     return {
-      exito: true,
-      ok: true,
+      exito: !!(res?.exito || res?.ok),
+      ok: !!(res?.exito || res?.ok),
       mensaje: res?.mensaje || 'Servicio eliminado correctamente de Google Sheets.',
     };
   },
@@ -846,31 +939,37 @@ export const gasService = {
   },
 
   /**
-   * Guarda un nuevo cliente en Google Sheets
+   * Guarda o edita un cliente en Google Sheets
+   * (Si es edición de cliente existente, requiere adminPass)
    */
-  async guardarCliente(cliente: Cliente): Promise<{ exito: boolean; mensaje: string }> {
-    if (isGasMode()) {
-      return callGasNative('guardarCliente', cliente);
-    }
-
-    const payload = {
+  async guardarCliente(cliente: Cliente, oldCuenta?: string, adminPass?: string): Promise<{ exito: boolean; mensaje: string }> {
+    const payload: any = {
       cuenta: String(cliente.cuenta || '').trim(),
       nombre: String(cliente.nombre || '').trim(),
     };
+    if (oldCuenta) payload.oldCuenta = String(oldCuenta).trim();
+    if (adminPass) {
+      payload.adminPass = adminPass;
+      payload.adminPassword = adminPass;
+    }
+
+    if (isGasMode()) {
+      return callGasNative('guardarCliente', cliente, oldCuenta, adminPass);
+    }
 
     const res = await callGasPost<any>('guardarCliente', payload, payload);
     return {
-      exito: true,
+      exito: !!(res?.exito || res?.ok !== false),
       mensaje: res?.mensaje || 'Cliente guardado correctamente en Google Sheets.',
     };
   },
 
   /**
-   * Elimina un cliente de Google Sheets
+   * Elimina un cliente de Google Sheets (requiere adminPass)
    */
-  async eliminarCliente(cuenta: string, fila?: number): Promise<{ exito: boolean; mensaje: string }> {
+  async eliminarCliente(cuenta: string, fila?: number, adminPass?: string): Promise<{ exito: boolean; mensaje: string }> {
     if (isGasMode()) {
-      return callGasNative('eliminarCliente', cuenta);
+      return callGasNative('eliminarCliente', cuenta, adminPass);
     }
 
     let targetFila = fila;
@@ -884,42 +983,53 @@ export const gasService = {
 
     const extraProps: any = { cuenta: String(cuenta) };
     if (typeof targetFila === 'number') extraProps.fila = targetFila;
+    if (adminPass) {
+      extraProps.adminPass = adminPass;
+      extraProps.adminPassword = adminPass;
+    }
 
     const res = await callGasPost<any>('eliminarCliente', {
       cuenta: String(cuenta),
       fila: targetFila,
+      adminPass: adminPass,
     }, extraProps);
 
     return {
-      exito: true,
+      exito: !!(res?.exito || res?.ok !== false),
       mensaje: res?.mensaje || 'Cliente eliminado correctamente de Google Sheets.',
     };
   },
 
   /**
-   * Guarda un operador en Google Sheets
+   * Guarda o edita un operador en Google Sheets
+   * (Si es edición de operador existente, requiere adminPass)
    */
-  async guardarOperador(operador: string): Promise<{ exito: boolean; mensaje: string }> {
-    if (isGasMode()) {
-      return callGasNative('guardarOperador', operador);
+  async guardarOperador(operador: string, oldNombre?: string, adminPass?: string): Promise<{ exito: boolean; mensaje: string }> {
+    const nombre = String(operador || '').trim();
+    const payload: any = { nombre, operador: nombre };
+    if (oldNombre) payload.oldNombre = String(oldNombre).trim();
+    if (adminPass) {
+      payload.adminPass = adminPass;
+      payload.adminPassword = adminPass;
     }
 
-    const nombre = String(operador || '').trim();
-    const payload = { nombre, operador: nombre };
+    if (isGasMode()) {
+      return callGasNative('guardarOperador', operador, oldNombre, adminPass);
+    }
 
     const res = await callGasPost<any>('guardarOperador', payload, payload);
     return {
-      exito: true,
+      exito: !!(res?.exito || res?.ok !== false),
       mensaje: res?.mensaje || 'Operador guardado correctamente en Google Sheets.',
     };
   },
 
   /**
-   * Elimina un operador de Google Sheets
+   * Elimina un operador de Google Sheets (requiere adminPass)
    */
-  async eliminarOperador(operador: string, fila?: number): Promise<{ exito: boolean; mensaje: string }> {
+  async eliminarOperador(operador: string, fila?: number, adminPass?: string): Promise<{ exito: boolean; mensaje: string }> {
     if (isGasMode()) {
-      return callGasNative('eliminarOperador', operador);
+      return callGasNative('eliminarOperador', operador, adminPass);
     }
 
     let targetFila = fila;
@@ -933,47 +1043,59 @@ export const gasService = {
 
     const extraProps: any = { nombre: operador, operador: operador };
     if (typeof targetFila === 'number') extraProps.fila = targetFila;
+    if (adminPass) {
+      extraProps.adminPass = adminPass;
+      extraProps.adminPassword = adminPass;
+    }
 
     const res = await callGasPost<any>('eliminarOperador', {
       nombre: operador,
       operador: operador,
       fila: targetFila,
+      adminPass: adminPass,
     }, extraProps);
 
     return {
-      exito: true,
+      exito: !!(res?.exito || res?.ok !== false),
       mensaje: res?.mensaje || 'Operador eliminado correctamente de Google Sheets.',
     };
   },
 
   /**
-   * Guarda configuración de maquinaria en Google Sheets
+   * Guarda o edita configuración de maquinaria en Google Sheets
+   * (Si es edición de maquinaria existente, requiere adminPass)
    */
-  async guardarMaquinaria(item: MaquinariaConfig): Promise<{ exito: boolean; mensaje: string }> {
-    if (isGasMode()) {
-      return callGasNative('guardarMaquinaria', item);
-    }
-
-    const datos = {
+  async guardarMaquinaria(item: MaquinariaConfig, oldMaq?: string, oldImp?: string, adminPass?: string): Promise<{ exito: boolean; mensaje: string }> {
+    const datos: any = {
       maquinaria: item.maquinaria,
       implemento: item.implemento || '',
       precio: Number(item.precio) || 0,
       unidad: item.unidad || 'Hora',
     };
+    if (oldMaq) datos.oldMaq = oldMaq;
+    if (oldImp !== undefined) datos.oldImp = oldImp;
+    if (adminPass) {
+      datos.adminPass = adminPass;
+      datos.adminPassword = adminPass;
+    }
+
+    if (isGasMode()) {
+      return callGasNative('guardarMaquinaria', item, oldMaq, oldImp, adminPass);
+    }
 
     const res = await callGasPost<any>('guardarMaquinaria', datos, datos);
     return {
-      exito: true,
+      exito: !!(res?.exito || res?.ok !== false),
       mensaje: res?.mensaje || 'Maquinaria guardada correctamente en Google Sheets.',
     };
   },
 
   /**
-   * Elimina configuración de maquinaria de Google Sheets
+   * Elimina configuración de maquinaria de Google Sheets (requiere adminPass)
    */
-  async eliminarMaquinaria(maquinaria: string, implemento: string, fila?: number): Promise<{ exito: boolean; mensaje: string }> {
+  async eliminarMaquinaria(maquinaria: string, implemento: string, fila?: number, adminPass?: string): Promise<{ exito: boolean; mensaje: string }> {
     if (isGasMode()) {
-      return callGasNative('eliminarMaquinaria', maquinaria, implemento);
+      return callGasNative('eliminarMaquinaria', maquinaria, implemento, adminPass);
     }
 
     let targetFila = fila;
@@ -987,15 +1109,20 @@ export const gasService = {
 
     const extraProps: any = { maquinaria, implemento };
     if (typeof targetFila === 'number') extraProps.fila = targetFila;
+    if (adminPass) {
+      extraProps.adminPass = adminPass;
+      extraProps.adminPassword = adminPass;
+    }
 
     const res = await callGasPost<any>('eliminarMaquinaria', {
       maquinaria,
       implemento,
       fila: targetFila,
+      adminPass: adminPass,
     }, extraProps);
 
     return {
-      exito: true,
+      exito: !!(res?.exito || res?.ok !== false),
       mensaje: res?.mensaje || 'Maquinaria eliminada correctamente de Google Sheets.',
     };
   },

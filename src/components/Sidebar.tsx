@@ -5,7 +5,8 @@ import {
   ClipboardList, 
   BarChart3, 
   Settings, 
-  X
+  X,
+  LogOut
 } from 'lucide-react';
 import { MotoniveladoraIcon } from './MotoniveladoraIcon';
 import { PWAInstallButton } from './PWAInstallButton';
@@ -18,6 +19,7 @@ interface SidebarProps {
   isOpenMobile: boolean;
   onCloseMobile: () => void;
   serviciosCount: number;
+  onCerrarSesion?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -25,7 +27,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectTab,
   isOpenMobile,
   onCloseMobile,
-  serviciosCount
+  serviciosCount,
+  onCerrarSesion
 }) => {
   const menuItems: { id: TabType; label: string; icon: React.ReactNode; badge?: number }[] = [
     { 
@@ -131,14 +134,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </nav>
 
         {/* In-App PWA Install in Sidebar */}
-        <div className="px-4 py-2">
+        <div className="px-4 py-2 space-y-2">
           <PWAInstallButton variant="sidebar" />
+          {onCerrarSesion && (
+            <button
+              onClick={() => {
+                onCloseMobile();
+                onCerrarSesion();
+              }}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-950/70 hover:bg-red-950/50 text-blue-300 hover:text-red-200 border border-blue-800/40 hover:border-red-800/40 rounded-xl text-xs font-bold transition cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Cerrar Sesión</span>
+            </button>
+          )}
         </div>
 
         {/* Footer info without technical codes */}
         <div className="p-4 border-t border-blue-900/40 text-xs text-blue-300/80 text-center">
           <p className="font-semibold text-white">CONTROL DE MAQUINARIA</p>
-          <p className="text-[11px] text-blue-300/60 mt-0.5">Base de datos Google Sheets</p>
+          <p className="text-[11px] text-blue-300/60 mt-0.5">Sistema Oficial de Gestión</p>
         </div>
       </aside>
     </>

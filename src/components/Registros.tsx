@@ -19,10 +19,11 @@ import {
 import { Servicio } from '../types';
 import { formatCurrency, formatNumber, formatDateDisplay, limpiarValorHorometro } from '../utils/formatters';
 import { gasService } from '../services/gasService';
+import { ModalAdminAuth } from './ModalAdminAuth';
 
 interface RegistrosProps {
-  onEditar: (servicio: Servicio) => void;
-  onEliminar: (nroServicio: string, fila?: number) => Promise<boolean | void> | void;
+  onEditar: (servicio: Servicio, adminPass?: string) => void;
+  onEliminar: (nroServicio: string, fila?: number, adminPass?: string) => Promise<boolean | void> | void;
   onImprimir: (servicio: Servicio) => void;
   onNuevoClick: () => void;
   maquinariaList: string[];
@@ -55,6 +56,20 @@ export const Registros: React.FC<RegistrosProps> = ({
   // Modal confirmación eliminar
   const [servicioAEliminar, setServicioAEliminar] = useState<Servicio | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [adminPassEliminar, setAdminPassEliminar] = useState<string>('');
+
+  // Modal de autorización administrativa
+  const [adminAuthModal, setAdminAuthModal] = useState<{
+    isOpen: boolean;
+    titulo: string;
+    accionDescripcion: string;
+    onAuthorized: (adminPass: string) => void;
+  }>({
+    isOpen: false,
+    titulo: '',
+    accionDescripcion: '',
+    onAuthorized: () => {},
+  });
 
   // Debounce ref for search input
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -152,13 +167,41 @@ export const Registros: React.FC<RegistrosProps> = ({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Flujo para EDITAR:
+  // Pulsar Editar -> solicitar Contraseña de administrador -> validar en Google Apps Script -> si es correcta, abrir edición.
+  const handleSolicitarEditar = (s: Servicio) => {
+    setAdminAuthModal({
+      isOpen: true,
+      titulo: 'Editar Servicio',
+      accionDescripcion: `Ingrese la contraseña de Administrador para autorizar la edición del servicio ${s.nroServicio}.`,
+      onAuthorized: (adminPass: string) => {
+        onEditar(s, adminPass);
+      }
+    });
+  };
+
+  // Flujo para ELIMINAR:
+  // Pulsar Eliminar -> solicitar Contraseña de administrador -> validar en Google Apps Script -> si es correcta, mostrar confirmación existente: "¿Eliminar este servicio?" -> Confirmar -> eliminar.
+  const handleSolicitarEliminar = (s: Servicio) => {
+    setAdminAuthModal({
+      isOpen: true,
+      titulo: 'Eliminar Servicio',
+      accionDescripcion: `Ingrese la contraseña de Administrador para autorizar la eliminación del servicio ${s.nroServicio}.`,
+      onAuthorized: (adminPass: string) => {
+        setAdminPassEliminar(adminPass);
+        setServicioAEliminar(s);
+      }
+    });
+  };
+
   // Handle deletion
   const handleConfirmarEliminar = async () => {
     if (!servicioAEliminar) return;
     setIsDeleting(true);
     try {
-      await onEliminar(servicioAEliminar.nroServicio, servicioAEliminar.fila);
+      await onEliminar(servicioAEliminar.nroServicio, servicioAEliminar.fila, adminPassEliminar);
       setServicioAEliminar(null);
+      setAdminPassEliminar('');
       // Reload current page, or previous page if current became empty
       const targetPage = (serviciosPaginados.length === 1 && paginaActual > 1) ? paginaActual - 1 : paginaActual;
       setPaginaActual(targetPage);
@@ -494,14 +537,14 @@ export const Registros: React.FC<RegistrosProps> = ({
                     <Printer className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => onEditar(s)}
+                    onClick={() => handleSolicitarEditar(s)}
                     className="p-2 text-slate-600 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 rounded-xl transition cursor-pointer"
                     title="Editar servicio"
                   >
                     <Edit3 className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => setServicioAEliminar(s)}
+                    onClick={() => handleSolicitarEliminar(s)}
                     className="p-2 text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 rounded-xl transition cursor-pointer"
                     title="Eliminar servicio"
                   >
@@ -593,14 +636,14 @@ export const Registros: React.FC<RegistrosProps> = ({
                             <Printer className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => onEditar(s)}
+                            onClick={() => handleSolicitarEditar(s)}
                             className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
                             title="Editar servicio"
                           >
                             <Edit3 className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => setServicioAEliminar(s)}
+                            onClick={() => handleSolicitarEliminar(s)}
                             className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
                             title="Eliminar servicio"
                           >
@@ -702,7 +745,7 @@ export const Registros: React.FC<RegistrosProps> = ({
             </div>
 
             <div className="text-center">
-              <h3 className="font-extrabold text-slate-900 text-base">¿Eliminar este servicio?</h3>
+              <h3 className="font-extrabold text-slate-900 text-base">¿Está seguro de que desea eliminar este registro?</h3>
               <p className="text-xs text-slate-500 mt-1">
                 Se eliminará permanentemente el registro{' '}
                 <strong className="text-slate-800 font-mono">
@@ -715,7 +758,10 @@ export const Registros: React.FC<RegistrosProps> = ({
             <div className="flex items-center justify-center gap-3 pt-2">
               <button
                 type="button"
-                onClick={() => setServicioAEliminar(null)}
+                onClick={() => {
+                  setServicioAEliminar(null);
+                  setAdminPassEliminar('');
+                }}
                 disabled={isDeleting}
                 className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
               >
@@ -740,6 +786,17 @@ export const Registros: React.FC<RegistrosProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal de Validación de Administrador */}
+      <ModalAdminAuth
+        isOpen={adminAuthModal.isOpen}
+        titulo={adminAuthModal.titulo}
+        accionDescripcion={adminAuthModal.accionDescripcion}
+        onClose={() => setAdminAuthModal(prev => ({ ...prev, isOpen: false }))}
+        onSuccess={(adminPass) => {
+          adminAuthModal.onAuthorized(adminPass);
+        }}
+      />
     </div>
   );
 };

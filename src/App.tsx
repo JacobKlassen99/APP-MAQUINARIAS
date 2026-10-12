@@ -17,7 +17,8 @@ import {
   PlusCircle,
   ClipboardList,
   BarChart3,
-  Settings
+  Settings,
+  LogOut
 } from 'lucide-react';
 
 import { 
@@ -40,8 +41,12 @@ import { Configuracion } from './components/Configuracion';
 import { ComprobanteModal } from './components/ComprobanteModal';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { MotoniveladoraIcon } from './components/MotoniveladoraIcon';
+import { PantallaLogin } from './components/PantallaLogin';
 
 export default function App() {
+  // Autenticación de acceso a nivel de usuario (validación en GAS / Biometría WebAuthn)
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [isOpenMobile, setIsOpenMobile] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -66,6 +71,7 @@ export default function App() {
 
   // Service for editing / receipt
   const [servicioEdicion, setServicioEdicion] = useState<Servicio | null>(null);
+  const [adminPassEdicion, setAdminPassEdicion] = useState<string>('');
   const [comprobanteServicio, setComprobanteServicio] = useState<Servicio | null>(null);
 
   // Toast feedback
@@ -110,10 +116,12 @@ export default function App() {
     }
   }, [showToast]);
 
-  // Initial mount
+  // Initial mount: Solo cargar si está autenticado
   useEffect(() => {
-    cargarTodo();
-  }, [cargarTodo]);
+    if (isAuthenticated) {
+      cargarTodo();
+    }
+  }, [isAuthenticated, cargarTodo]);
 
   const [isLoadingReportes, setIsLoadingReportes] = useState<boolean>(false);
 
@@ -161,7 +169,7 @@ export default function App() {
       };
 
       const res = esEdicion
-        ? await gasService.editarServicio(datosParaGuardar)
+        ? await gasService.editarServicio(datosParaGuardar, adminPassEdicion)
         : await gasService.guardarServicio(datosParaGuardar, datos.forzarGuardar);
 
       if (res && (res.exito || res.ok)) {
@@ -170,6 +178,7 @@ export default function App() {
           : (res.mensaje || `Servicio ${res.nroServicio || ''} guardado correctamente.`);
         showToast(msg, 'ok');
         setServicioEdicion(null);
+        setAdminPassEdicion('');
 
         // Si se guardó un nuevo servicio, actualizar correlativo SERV-
         if (res.nroServicio && res.nroServicio.toUpperCase().startsWith('SERV-')) {
@@ -195,7 +204,7 @@ export default function App() {
         }
         return true;
       } else {
-        const errorMsg = res?.mensaje || 'No se pudo guardar el servicio en Google Sheets.';
+        const errorMsg = res?.mensaje || 'No se pudo guardar el servicio.';
         showToast(`No se pudo guardar el servicio: ${errorMsg}`, 'error');
         return false;
       }
@@ -208,13 +217,13 @@ export default function App() {
     }
   };
 
-  // Eliminar Servicio
-  const handleEliminarServicio = async (nroServicio: string, fila?: number) => {
+  // Eliminar Servicio (con contraseña de Administrador)
+  const handleEliminarServicio = async (nroServicio: string, fila?: number, adminPass?: string) => {
     setIsLoading(true);
     try {
-      const res = await gasService.eliminarServicio(nroServicio, fila);
+      const res = await gasService.eliminarServicio(nroServicio, fila, adminPass);
       if (res && (res.exito || res.ok)) {
-        showToast(res.mensaje || 'Servicio eliminado correctamente de Google Sheets.', 'ok');
+        showToast(res.mensaje || 'Servicio eliminado correctamente.', 'ok');
         await cargarTodo(true);
         if (servicios.length > 0) {
           cargarServiciosReportes(true);
@@ -247,6 +256,18 @@ export default function App() {
   };
 
   const maquinasUnicas = Array.from(new Set(maquinariaList.map(m => m.maquinaria)));
+
+  // Si no ha iniciado sesión, mostrar la Pantalla de Acceso Oficial
+  if (!isAuthenticated) {
+    return (
+      <PantallaLogin
+        onLoginSuccess={() => {
+          setIsAuthenticated(true);
+          cargarTodo();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row text-slate-800 antialiased pb-20 md:pb-0">
@@ -284,6 +305,7 @@ export default function App() {
         isOpenMobile={isOpenMobile}
         onCloseMobile={() => setIsOpenMobile(false)}
         serviciosCount={stats.totalServicios || servicios.length}
+        onCerrarSesion={() => setIsAuthenticated(false)}
       />
 
       {/* Main Body Area */}
@@ -309,7 +331,7 @@ export default function App() {
                   Control de Maquinaria
                 </h1>
                 <p className="text-[10px] text-blue-300 font-semibold hidden sm:block">
-                  Conectado con Google Sheets
+                  Sistema en línea
                 </p>
               </div>
             </div>
@@ -321,7 +343,7 @@ export default function App() {
               onClick={() => cargarTodo()}
               disabled={isLoading}
               className="px-3 py-1.5 bg-blue-900/60 hover:bg-blue-800 text-blue-100 hover:text-white border border-blue-700/50 rounded-lg text-xs font-bold transition flex items-center gap-1.5"
-              title="Sincronizar con Google Sheets"
+              title="Sincronizar datos"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-white' : ''}`} />
               <span className="hidden sm:inline">Sincronizar</span>
@@ -330,12 +352,22 @@ export default function App() {
             <button
               onClick={() => {
                 setServicioEdicion(null);
+                setAdminPassEdicion('');
                 setActiveTab('nuevo');
               }}
               className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold shadow-xs transition flex items-center gap-1"
             >
               <Plus className="w-4 h-4" />
               <span className="hidden sm:inline">Nuevo</span>
+            </button>
+
+            <button
+              onClick={() => setIsAuthenticated(false)}
+              className="px-2.5 py-1.5 bg-blue-950/70 hover:bg-red-900/60 text-blue-200 hover:text-white border border-blue-800/50 hover:border-red-600/50 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              title="Cerrar sesión"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Salir</span>
             </button>
           </div>
         </header>
@@ -348,7 +380,7 @@ export default function App() {
                 <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                 <div>
                   <strong className="font-extrabold text-amber-950 block">
-                    Conexión con el Web App de Google Apps Script:
+                    Estado de conexión con el servidor:
                   </strong>
                   <span>{connectionError.msg}</span>
                   {connectionError.detalle && (
@@ -375,6 +407,7 @@ export default function App() {
               stats={stats}
               onNuevoClick={() => {
                 setServicioEdicion(null);
+                setAdminPassEdicion('');
                 setActiveTab('nuevo');
               }}
               onVerRegistrosClick={() => setActiveTab('registros')}
@@ -393,6 +426,7 @@ export default function App() {
               onGuardar={handleGuardarServicio}
               onCancelarEdicion={() => {
                 setServicioEdicion(null);
+                setAdminPassEdicion('');
                 setActiveTab('registros');
               }}
               checkDuplicate={checkDuplicate}
@@ -401,14 +435,16 @@ export default function App() {
 
           {activeTab === 'registros' && (
             <Registros
-              onEditar={(s) => {
+              onEditar={(s, adminPass) => {
                 setServicioEdicion(s);
+                if (adminPass) setAdminPassEdicion(adminPass);
                 setActiveTab('nuevo');
               }}
               onEliminar={handleEliminarServicio}
               onImprimir={(s) => setComprobanteServicio(s)}
               onNuevoClick={() => {
                 setServicioEdicion(null);
+                setAdminPassEdicion('');
                 setActiveTab('nuevo');
               }}
               maquinariaList={maquinasUnicas}
@@ -431,33 +467,33 @@ export default function App() {
               maquinaria={maquinariaList}
               serviciosCount={servicios.length}
               ultimoNumero={ultimoNumero}
-              onGuardarCliente={async (c) => {
-                const res = await gasService.guardarCliente(c);
+              onGuardarCliente={async (c, oldCuenta, adminPass) => {
+                const res = await gasService.guardarCliente(c, oldCuenta, adminPass);
                 showToast(res.mensaje, res.exito ? 'ok' : 'error');
                 await cargarTodo(true);
               }}
-              onEliminarCliente={async (cuenta, fila) => {
-                const res = await gasService.eliminarCliente(cuenta, fila);
+              onEliminarCliente={async (cuenta, fila, adminPass) => {
+                const res = await gasService.eliminarCliente(cuenta, fila, adminPass);
                 showToast(res.mensaje, res.exito ? 'ok' : 'error');
                 await cargarTodo(true);
               }}
-              onGuardarOperador={async (op) => {
-                const res = await gasService.guardarOperador(op);
+              onGuardarOperador={async (op, oldNombre, adminPass) => {
+                const res = await gasService.guardarOperador(op, oldNombre, adminPass);
                 showToast(res.mensaje, res.exito ? 'ok' : 'error');
                 await cargarTodo(true);
               }}
-              onEliminarOperador={async (op, fila) => {
-                const res = await gasService.eliminarOperador(op, fila);
+              onEliminarOperador={async (op, fila, adminPass) => {
+                const res = await gasService.eliminarOperador(op, fila, adminPass);
                 showToast(res.mensaje, res.exito ? 'ok' : 'error');
                 await cargarTodo(true);
               }}
-              onGuardarMaquinaria={async (item) => {
-                const res = await gasService.guardarMaquinaria(item);
+              onGuardarMaquinaria={async (item, oldMaq, oldImp, adminPass) => {
+                const res = await gasService.guardarMaquinaria(item, oldMaq, oldImp, adminPass);
                 showToast(res.mensaje, res.exito ? 'ok' : 'error');
                 await cargarTodo(true);
               }}
-              onEliminarMaquinaria={async (m, imp, fila) => {
-                const res = await gasService.eliminarMaquinaria(m, imp, fila);
+              onEliminarMaquinaria={async (m, imp, fila, adminPass) => {
+                const res = await gasService.eliminarMaquinaria(m, imp, fila, adminPass);
                 showToast(res.mensaje, res.exito ? 'ok' : 'error');
                 await cargarTodo(true);
               }}

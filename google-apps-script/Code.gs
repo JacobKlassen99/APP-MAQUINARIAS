@@ -98,28 +98,68 @@ function despacharAccion(accion, payload) {
     case 'datosIniciales':
     case 'obtenerDatosIniciales':
       return obtenerDatosIniciales();
+    case 'validarAccesoUsuario':
+      return validarAccesoUsuario(payload.password || payload.pass || payload.datos?.password);
+    case 'validarAdmin':
+      return validarAdmin(payload.password || payload.passwordAdmin || payload.adminPass || payload.datos?.password);
     case 'guardarServicio':
       return guardarServicio(payload.datos || payload.servicio || payload);
-    case 'editarServicio':
+    case 'editarServicio': {
+      const auth = verificarAutorizacionAdmin(payload);
+      if (!auth.autorizada) return { ok: false, exito: false, mensaje: auth.mensaje };
       return editarServicio(payload.datos || payload.servicio || payload);
-    case 'eliminarServicio':
+    }
+    case 'eliminarServicio': {
+      const auth = verificarAutorizacionAdmin(payload);
+      if (!auth.autorizada) return { ok: false, exito: false, mensaje: auth.mensaje };
       return eliminarServicio(payload.nroServicio || payload.numero || payload.fila || payload.id);
+    }
     case 'buscarClientes':
       return buscarClientes(payload.criterio || payload.texto || payload.q || '');
     case 'sincronizarNumeroServicios':
       return sincronizarNumeroServicios();
-    case 'guardarCliente':
-      return guardarCliente(payload.cliente || payload);
-    case 'eliminarCliente':
-      return eliminarCliente(payload.cuenta);
-    case 'guardarOperador':
-      return guardarOperador(payload.nombre || payload.operador, payload.oldNombre);
-    case 'eliminarOperador':
-      return eliminarOperador(payload.nombre || payload.operador);
-    case 'guardarMaquinaria':
-      return guardarMaquinaria(payload.item || payload, payload.oldMaq, payload.oldImp);
-    case 'eliminarMaquinaria':
-      return eliminarMaquinaria(payload.maquinaria, payload.implemento);
+    case 'guardarCliente': {
+      // Si es edición de un cliente existente, requiere admin
+      const esEdicionCliente = !!(payload.oldCuenta || payload.cliente?.oldCuenta || payload.datos?.oldCuenta);
+      if (esEdicionCliente) {
+        const auth = verificarAutorizacionAdmin(payload);
+        if (!auth.autorizada) return { ok: false, exito: false, mensaje: auth.mensaje };
+      }
+      return guardarCliente(payload.cliente || payload.datos || payload, payload.oldCuenta || payload.cliente?.oldCuenta);
+    }
+    case 'eliminarCliente': {
+      const auth = verificarAutorizacionAdmin(payload);
+      if (!auth.autorizada) return { ok: false, exito: false, mensaje: auth.mensaje };
+      return eliminarCliente(payload.cuenta || payload.datos?.cuenta);
+    }
+    case 'guardarOperador': {
+      // Si es edición de operador existente, requiere admin
+      const esEdicionOperador = !!(payload.oldNombre || payload.operador?.oldNombre || payload.datos?.oldNombre);
+      if (esEdicionOperador) {
+        const auth = verificarAutorizacionAdmin(payload);
+        if (!auth.autorizada) return { ok: false, exito: false, mensaje: auth.mensaje };
+      }
+      return guardarOperador(payload.nombre || payload.operador || payload.datos?.nombre, payload.oldNombre || payload.datos?.oldNombre);
+    }
+    case 'eliminarOperador': {
+      const auth = verificarAutorizacionAdmin(payload);
+      if (!auth.autorizada) return { ok: false, exito: false, mensaje: auth.mensaje };
+      return eliminarOperador(payload.nombre || payload.operador || payload.datos?.nombre);
+    }
+    case 'guardarMaquinaria': {
+      // Si es edición de maquinaria existente, requiere admin
+      const esEdicionMaq = !!(payload.oldMaq || payload.datos?.oldMaq);
+      if (esEdicionMaq) {
+        const auth = verificarAutorizacionAdmin(payload);
+        if (!auth.autorizada) return { ok: false, exito: false, mensaje: auth.mensaje };
+      }
+      return guardarMaquinaria(payload.item || payload.datos || payload, payload.oldMaq || payload.datos?.oldMaq, payload.oldImp || payload.datos?.oldImp);
+    }
+    case 'eliminarMaquinaria': {
+      const auth = verificarAutorizacionAdmin(payload);
+      if (!auth.autorizada) return { ok: false, exito: false, mensaje: auth.mensaje };
+      return eliminarMaquinaria(payload.maquinaria || payload.datos?.maquinaria, payload.implemento || payload.datos?.implemento);
+    }
     case 'crearCopiaSeguridad':
       return crearCopiaSeguridad();
     case 'configurarBackupDiario':
@@ -1210,3 +1250,132 @@ function configurarBackupDiario() {
 function ejecutarBackupAutomatico() {
   crearCopiaSeguridad();
 }
+
+/**
+ * =========================================================================
+ * SEGURIDAD — CONTROL DE ACCESO Y AUTORIZACIÓN (Code.gs)
+ * =========================================================================
+ * 
+ * Niveles de seguridad:
+ * 1. USUARIO: Acceso general a la aplicación (validación de contraseña).
+ * 2. ADMINISTRADOR: Exclusivamente contraseña de Administrador para editar/eliminar.
+ * 
+ * Las contraseñas se almacenan mediante PropertiesService.getScriptProperties(),
+ * un almacenamiento seguro y privado del script en los servidores de Google,
+ * inaccesible desde el cliente o navegador web.
+ */
+
+/**
+ * Valida la contraseña de usuario para permitir ingresar a la aplicación.
+ */
+function validarAccesoUsuario(password) {
+  const passAlmacenada = PropertiesService.getScriptProperties().getProperty('PASS_USUARIO');
+  if (!passAlmacenada) {
+    return {
+      ok: false,
+      exito: false,
+      mensaje: 'El sistema aún no tiene configurada la contraseña de usuario en Google Apps Script. Por favor ejecute establecerContrasenas() en Apps Script.'
+    };
+  }
+
+  if (String(password || '').trim() === String(passAlmacenada).trim()) {
+    return { ok: true, exito: true, mensaje: 'Acceso autorizado.' };
+  }
+
+  return { ok: false, exito: false, mensaje: 'Contraseña incorrecta.' };
+}
+
+/**
+ * Valida la contraseña de administrador para autorizar operaciones sensibles.
+ */
+function validarAdmin(passwordAdmin) {
+  const passAdminAlmacenada = PropertiesService.getScriptProperties().getProperty('PASS_ADMIN');
+  if (!passAdminAlmacenada) {
+    return {
+      ok: false,
+      exito: false,
+      mensaje: 'El sistema aún no tiene configurada la contraseña de administrador en Google Apps Script. Por favor ejecute establecerContrasenas() en Apps Script.'
+    };
+  }
+
+  if (String(passwordAdmin || '').trim() === String(passAdminAlmacenada).trim()) {
+    return { ok: true, exito: true, mensaje: 'Autorización administrativa concedida.' };
+  }
+
+  return { ok: false, exito: false, mensaje: 'Contraseña de administrador incorrecta.' };
+}
+
+/**
+ * Verifica si una solicitud POST cuenta con autorización de administrador válida.
+ */
+function verificarAutorizacionAdmin(payload) {
+  if (!payload) {
+    return { autorizada: false, mensaje: 'Acción no autorizada: datos de solicitud vacíos.' };
+  }
+
+  const passAdminEnviada = payload.adminPass || payload.adminPassword || payload.tokenAdmin || 
+    (payload.datos && (payload.datos.adminPass || payload.datos.adminPassword));
+  const passAdminAlmacenada = PropertiesService.getScriptProperties().getProperty('PASS_ADMIN');
+
+  if (!passAdminAlmacenada) {
+    return {
+      autorizada: false,
+      mensaje: 'Acción rechazada: No se ha configurado la contraseña de administrador en Google Apps Script.'
+    };
+  }
+
+  if (!passAdminEnviada || String(passAdminEnviada).trim() !== String(passAdminAlmacenada).trim()) {
+    return {
+      autorizada: false,
+      mensaje: 'Acción no autorizada: requiere contraseña de administrador válida.'
+    };
+  }
+
+  return { autorizada: true };
+}
+
+/**
+ * =========================================================================
+ * PROCEDIMIENTO DE CONFIGURACIÓN INICIAL DE CONTRASEÑAS
+ * =========================================================================
+ * 
+ * Instrucciones para configurar las contraseñas:
+ * 1. Abra este script en https://script.google.com
+ * 2. En el menú desplegable de funciones seleccione: 'establecerContrasenas'
+ * 3. Escriba sus contraseñas deseadas en las dos constantes abajo.
+ * 4. Haga clic en el botón 'Ejecutar' (Run).
+ * 5. Puede borrar las contraseñas de este archivo tras ejecutarlas,
+ *    ya que quedan guardadas de forma segura y permanente en Script Properties.
+ */
+function establecerContrasenas() {
+  // >>> REEMPLACE AQUÍ SUS CONTRASEÑAS <<<
+  const CONTRASENA_USUARIO       = 'ESCRIBA_AQUI_SU_CONTRASENA_DE_USUARIO';
+  const CONTRASENA_ADMINISTRADOR = 'ESCRIBA_AQUI_SU_CONTRASENA_DE_ADMINISTRADOR';
+
+  if (CONTRASENA_USUARIO === 'ESCRIBA_AQUI_SU_CONTRASENA_DE_USUARIO' || 
+      CONTRASENA_ADMINISTRADOR === 'ESCRIBA_AQUI_SU_CONTRASENA_DE_ADMINISTRADOR') {
+    throw new Error('Debe escribir sus contraseñas reales en CONTRASENA_USUARIO y CONTRASENA_ADMINISTRADOR antes de ejecutar.');
+  }
+
+  const scriptProperties = PropertiesService.getScriptProperties();
+  scriptProperties.setProperty('PASS_USUARIO', String(CONTRASENA_USUARIO).trim());
+  scriptProperties.setProperty('PASS_ADMIN', String(CONTRASENA_ADMINISTRADOR).trim());
+
+  Logger.log('¡Contraseñas de Usuario y Administrador configuradas exitosamente en Script Properties!');
+  return { ok: true, mensaje: 'Contraseñas configuradas con éxito.' };
+}
+
+/**
+ * Función alternativa para configurar contraseñas mediante parámetros desde la consola
+ */
+function configurarContrasenas(passUsuario, passAdmin) {
+  if (!passUsuario || !passAdmin) {
+    throw new Error('Debe proporcionar passUsuario y passAdmin');
+  }
+  const scriptProperties = PropertiesService.getScriptProperties();
+  scriptProperties.setProperty('PASS_USUARIO', String(passUsuario).trim());
+  scriptProperties.setProperty('PASS_ADMIN', String(passAdmin).trim());
+  Logger.log('Contraseñas de Usuario y Administrador actualizadas.');
+  return { ok: true, mensaje: 'Contraseñas actualizadas.' };
+}
+
